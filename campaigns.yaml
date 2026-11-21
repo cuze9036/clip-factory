@@ -1,0 +1,82 @@
+# Every campaign is its own lane: its own sources, rules, budget, daily quota and earnings.
+#
+# Easiest way to add one: open the dashboard, go to Campaigns > Add a campaign, paste the
+# campaign page's text, and the AI fills in the form. Campaigns added there live in the
+# database; this file is optional.
+#
+# If you prefer this file, add an entry here and run:  clipfactory sync
+# The entries below are templates. Replace channels and rules with the real campaign's details.
+
+campaigns:
+  - id: streamer-gta6
+    name: Streamer GTA 6 clips
+    platform: Whop                    # the clipping platform running the campaign
+    creator: StreamerHandle
+    url: https://whop.com/            # the campaign page where you submit clips
+    topic: GTA 6 livestreams          # tells the AI what the content is about
+    audience: US viewers aged 16 to 34
+    rate_per_1k: 1.00                 # USD paid per 1,000 views
+    budget_left: 5000                 # update from the campaign page; the lane pauses at 0
+    max_payout_per_clip: 300
+    min_views: 1000                   # views needed before a clip pays
+    ends: 2026-12-31
+    daily_clip_quota: 3               # clips this lane posts per day
+    platforms: [youtube, instagram]
+    required_hashtags: ["#GTA6"]
+    credit: "Credit: @StreamerHandle"
+    clip_length: [20, 55]
+    min_score: 7                      # moments the AI scores below this are skipped
+    priority: 1                       # lower number = first pick of posting slots
+    rules:
+      - No clips of sponsor segments
+    sources:
+      - kind: youtube_channel         # watched for finished live streams
+        channel_id: UCxxxxxxxxxxxxxxxxxxxxxx   # or an @handle
+        name: Streamer main channel
+        streams_only: true
+        layout: facecam_split         # facecam_split | blur | crop
+        facecam: [0.70, 0.02, 0.28, 0.30]   # x, y, width, height as fractions of the frame
+
+  - id: own-gta6
+    name: My GTA 6 channel            # your own channel: no campaign, no payout rules
+    topic: GTA 6 gameplay
+    rate_per_1k: 0
+    daily_clip_quota: 2
+    platforms: [youtube, instagram]
+    required_hashtags: ["#GTA6", "#GTAVI"]
+    clip_length: [20, 55]
+    min_score: 7
+    priority: 5                       # campaigns that pay get the best posting slots first
+    sources:
+      - kind: folder                  # drop your own GTA 6 recordings here
+        path: ~/Videos/GTA6 recordings
+        layout: blur
+      # - kind: youtube_channel       # or your own YouTube channel's streams
+      #   channel_id: "@YourChannel"
+      #   streams_only: true
+
+  - id: podcast-highlights
+    name: Podcast highlights
+    platform: Whop
+    creator: ExamplePodcast
+    url: https://whop.com/
+    topic: comedy podcast
+    rate_per_1k: 1.50
+    min_views: 5000
+    daily_clip_quota: 2
+    platforms: [youtube, instagram, facebook]
+    required_hashtags: ["#podcast"]
+    credit: "Credit: @ExamplePodcast"
+    clip_length: [25, 60]
+    min_score: 7
+    priority: 2
+    rules:
+      - Show the guest's name on screen
+    sources:
+      - kind: twitch_channel          # finished Twitch streams
+        channel: examplepodcast
+        layout: facecam_split
+        facecam: [0.0, 0.0, 0.5, 1.0]
+      - kind: folder                  # raw files the campaign shares, e.g. a synced Google Drive folder
+        path: ~/Google Drive/Example Podcast raw
+        layout: blur

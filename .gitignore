@@ -1,0 +1,11 @@
+.env
+.venv/
+secrets/
+data/
+__pycache__/
+*.pyc
+data-demo/
+Ready to post/
+config.local.yaml
+logs/
+*.egg-info/

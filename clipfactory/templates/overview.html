@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block body %}
+<style>
+.lane{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lane-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px 20px;flex-wrap:wrap}
+.lane-head h2{margin:0;font-size:17px}
+.lane-head h2 a{text-decoration:none}
+.facts{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+.facts b{color:var(--fg);font-variant-numeric:tabular-nums}
+.strip{display:grid;grid-template-columns:repeat(9,minmax(104px,1fr));border-top:1px solid var(--line);overflow-x:auto}
+.st{padding:12px 14px;border-right:1px solid var(--line);position:relative;min-width:104px}
+.st:last-child{border-right:0}
+.st:not(:last-child)::after{content:"";position:absolute;right:-6px;top:50%;width:10px;height:10px;background:var(--panel);border-top:1px solid var(--line);border-right:1px solid var(--line);transform:translateY(-50%) rotate(45deg);z-index:1}
+.st small{display:block;font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.st b{display:block;font-size:22px;font-variant-numeric:tabular-nums;margin-top:2px}
+.st em{font-style:normal;font-size:12px;color:var(--muted)}
+.st.hot{background:var(--accent-soft)}
+.st.hot b{color:var(--accent)}
+.st.ai small{color:var(--ai)}
+.st.money b{color:var(--ok)}
+.feed{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.feed li{display:grid;grid-template-columns:96px 1fr;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.feed li:last-child{border-bottom:0}
+.feed .error{color:var(--bad)} .feed .warn{color:var(--warn)}
+.cols{display:grid;grid-template-columns:2fr 1fr;gap:20px}
+.cols>*{min-width:0}
+.feed li span{min-width:0;overflow-wrap:anywhere}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+</style>
+
+<div class="row" style="justify-content:space-between">
+  <div>
+    <h1>Campaign lanes</h1>
+    <p class="muted" style="margin:4px 0 0">Stream watcher last ran {{ watcher_last|ago }} · stats updated {{ stats_last|ago }}</p>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><span>Waiting for your review</span><b>{{ totals.review }}</b></div>
+  <div class="kpi"><span>Scheduled posts</span><b>{{ totals.scheduled }}</b></div>
+  <div class="kpi"><span>Posts live</span><b>{{ totals.posted }}</b></div>
+  <div class="kpi"><span>Total views</span><b>{{ totals.views|num }}</b></div>
+  <div class="kpi"><span>Estimated campaign earnings</span><b>${{ '%.2f'|format(totals.earned) }}</b></div>
+</div>
+
+{% for l in lanes %}{% set c, s = l.c, l.s %}
+<section class="lane">
+  <div class="lane-head">
+    <div>
+      <h2><a href="{{ url_for('campaign', cid=c.id) }}">{{ c.name }}</a>
+        <span class="chip {{ 'budget' if s.state=='budget used' else s.state }}">{{ s.state }}</span>
+        {% if c.demo %}<span class="chip demo">demo data</span>{% endif %}</h2>
+      <div class="facts" style="margin-top:6px">
+        {% if c.platform or c.creator %}<span>{{ c.platform or 'Campaign' }}{% if c.creator %} · by <b>{{ c.creator }}</b>{% endif %}</span>{% endif %}
+        <span>{{ c.topic }}</span>
+        <span>Rate <b>${{ '%.2f'|format(c.rate_per_1k) }}</b> / 1K views</span>
+        {% if c.budget_left is not none %}<span>Budget left <b>${{ '{:,.0f}'.format(c.budget_left) }}</b></span>{% endif %}
+        <span>Today <b>{{ s.posted_today }} / {{ c.daily_clip_quota }}</b> clips</span>
+        <span>Posts to <b>{{ c.platforms|join(', ') }}</b></span>
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('pause', cid=c.id) }}"><button>{{ 'Resume lane' if c.paused else 'Pause lane' }}</button></form>
+  </div>
+  <div class="strip">
+    <div class="st"><small>Watching</small><b>{{ s.sources }}</b><em>channels</em></div>
+    <div class="st {{ 'hot' if s.videos_waiting }}"><small>Streams found</small><b>{{ s.videos }}</b><em>{{ s.videos_waiting }} being watched</em></div>
+    <div class="st ai {{ 'hot' if s.moments }}"><small>AI moments</small><b>{{ s.moments_total }}</b><em>{{ s.moments }} to download</em></div>
+    <div class="st {{ 'hot' if s.editing }}"><small>Editing</small><b>{{ s.editing }}</b><em>cut, captions</em></div>
+    <div class="st {{ 'hot' if s.review }}"><small>Your review</small><b>{{ s.review }}</b><em>clips</em></div>
+    <div class="st"><small>Scheduled</small><b>{{ s.scheduled }}</b><em>US prime time</em></div>
+    <div class="st"><small>Posted</small><b>{{ s.posted }}</b><em>{{ s.to_submit }} to submit</em></div>
+    <div class="st"><small>Views</small><b>{{ s.views|num }}</b><em>all platforms</em></div>
+    <div class="st money"><small>Earned (est.)</small><b>${{ '%.0f'|format(s.earned) }}</b><em>min {{ '{:,}'.format(c.min_views) }} views</em></div>
+  </div>
+</section>
+{% else %}
+<div class="panel">No campaigns yet. <a href="{{ url_for('campaign_new') }}">Add your first campaign</a>: paste the campaign page and the AI fills in the details.</div>
+{% endfor %}
+
+<div class="cols">
+  <section class="panel">
+    <h2>Activity</h2>
+    <ul class="feed">
+      {% for e in events %}
+      <li><span class="muted mono">{{ e.at|ago }}</span><span class="{{ e.level }}">{% if e.campaign %}<b>{{ e.campaign }}:</b> {% endif %}{{ e.msg }}</span></li>
+      {% else %}<li><span></span><span class="muted">Nothing yet. Start the runner with <span class="mono">clipfactory run</span>.</span></li>{% endfor %}
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>Add a video by hand</h2>
+    <form method="post" action="{{ url_for('add_video') }}" style="display:flex;flex-direction:column;gap:10px">
+      <label for="ref" class="muted" style="font-size:13px">YouTube URL or a file path on this computer</label>
+      <input id="ref" name="ref" placeholder="https://www.youtube.com/watch?v=..." required>
+      <label for="campaign-select" class="muted" style="font-size:13px">Campaign lane</label>
+      <select id="campaign-select" name="campaign">{% for c in all_campaigns %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+      <button class="go">Add and find moments</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

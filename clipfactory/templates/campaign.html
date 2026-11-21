@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ c.name }} · Clip Factory{% endblock %}
+{% block body %}
+<style>
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px 24px}
+.rules div small{display:block;font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.video{border-top:1px solid var(--line);padding:16px 0;display:flex;flex-direction:column;gap:10px}
+.video:first-of-type{border-top:0;padding-top:0}
+.moment{display:grid;grid-template-columns:120px 76px 1fr auto;gap:12px;align-items:baseline;padding:8px 12px;border-radius:6px;background:var(--soft);font-size:14px}
+@media(max-width:700px){.moment{grid-template-columns:1fr}}
+.score{font:700 13px var(--mono)}
+.score.hi{color:var(--ok)}
+</style>
+<div>
+  <p class="muted" style="margin:0 0 4px"><a href="{{ url_for('overview') }}">Lanes</a> /</p>
+  <div class="row" style="justify-content:space-between">
+    <h1>{{ c.name }} <span class="chip {{ 'budget' if state=='budget used' else state }}">{{ state }}</span>{% if c.demo %} <span class="chip demo">demo data</span>{% endif %}</h1>
+    <a class="btn" href="{{ url_for('campaign_edit', cid=c.id) }}">Edit campaign</a>
+  </div>
+  <p class="muted" style="margin:4px 0 0">{{ c.platform or 'Campaign' }}{% if c.creator %} · by {{ c.creator }}{% endif %} · {{ c.topic }} · for {{ c.audience }}</p>
+</div>
+
+<section class="panel">
+  <h2>Campaign rules</h2>
+  <div class="rules">
+    <div><small>Pays</small>${{ '%.2f'|format(c.rate_per_1k) }} per 1K views</div>
+    <div><small>Pays after</small>{{ '{:,}'.format(c.min_views) }} views</div>
+    <div><small>Max per clip</small>{{ '$%.0f'|format(c.max_payout_per_clip) if c.max_payout_per_clip else 'No cap' }}</div>
+    <div><small>Budget left</small>{{ '${:,.0f}'.format(c.budget_left) if c.budget_left is not none else 'Not set' }}</div>
+    <div><small>Ends</small>{{ c.ends or 'No end date' }}</div>
+    <div><small>Clips per day</small>{{ c.daily_clip_quota }}</div>
+    <div><small>Clip length</small>{{ c.min_len }} to {{ c.max_len }} s</div>
+    <div><small>Min AI score</small>{{ '%.0f'|format(c.min_score) }} / 10</div>
+    <div><small>Platforms</small>{{ c.platforms|join(', ') }}</div>
+    <div><small>Hashtags</small>{{ c.required_hashtags|join(' ') or 'None' }}</div>
+    <div><small>Credit line</small>{{ c.credit or 'None' }}</div>
+    <div><small>Submit at</small>{% if c.url %}<a href="{{ c.url }}" target="_blank" rel="noopener">campaign page</a>{% else %}Not a paid campaign{% endif %}</div>
+  </div>
+  {% if c.rules %}
+  <div style="margin-top:16px"><small style="font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)">Rules the AI follows</small>
+    <ul style="margin:6px 0 0;padding-left:20px">{% for r in c.rules %}<li>{{ r }}</li>{% endfor %}</ul></div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Sources the watcher checks</h2>
+  <div class="scroll"><table>
+    <tr><th>Source</th><th>Watches</th><th>Layout</th><th>Last checked</th></tr>
+    {% for s in sources %}
+    <tr><td>{{ s.name }}<div class="muted mono">{{ {'twitch_channel':'Twitch','folder':'Folder'}.get(s.kind, 'YouTube') }} · {{ s.channel_id }}</div></td>
+      <td>{% if s.kind=='folder' %}New files{% elif s.streams_only %}Finished live streams{% else %}Streams and uploads{% endif %}</td>
+      <td>{{ s.layout.replace('_',' ') }}</td><td>{{ s.last_checked|ago }}</td></tr>
+    {% else %}<tr><td colspan="4" class="muted">No channels. Add sources in campaigns.yaml or add videos by hand.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="panel">
+  <h2>Streams and the moments the AI picked</h2>
+  {% for v in videos %}
+  <div class="video">
+    <div class="row" style="justify-content:space-between">
+      <div><b>{{ v.title }}</b>
+        <div class="muted" style="font-size:13px">{{ 'Live stream' if v.is_stream else 'Video' }} · {{ (v.duration_s or 0)|ts }} long ·
+          {% if v.status=='analyzed' %}watched by <span class="chip ai">{{ v.route }}</span>{% elif v.status=='failed' %}<span style="color:var(--bad)">failed: {{ v.error }}</span>{% else %}{{ v.status }}{% endif %}</div></div>
+      {% if v.url %}<a class="btn" href="{{ v.url }}" target="_blank" rel="noopener">Open on YouTube</a>{% endif %}
+    </div>
+    {% for m in v.moments %}
+    <div class="moment">
+      {% if v.url %}<a class="mono" href="{{ v.url }}&t={{ m.start_s|int }}s" target="_blank" rel="noopener">{{ m.start_s|ts }}–{{ m.end_s|ts }}</a>{% else %}<span class="mono">{{ m.start_s|ts }}–{{ m.end_s|ts }}</span>{% endif %}
+      <span><span class="score {{ 'hi' if m.score>=8 }}">{{ '%.0f'|format(m.score) }}/10</span> <span class="muted">{{ m.category }}</span></span>
+      <span><b>{{ m.hook }}</b> <span class="muted">{{ m.why }}</span></span>
+      <span class="chip">{{ (m.clip_status or m.status).replace('_', ' ') }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">No streams yet. The watcher adds them when a source's stream ends.</p>{% endfor %}
+</section>
+{% endblock %}

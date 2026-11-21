@@ -1,0 +1,109 @@
+# Clip Factory settings. Secrets go in .env, never here.
+
+timezone: America/New_York        # posting slots are US Eastern time
+
+watcher:
+  every_minutes: 15               # how often to check sources for new uploads and ended streams
+  lookback_days: 3                # ignore videos older than this
+  min_duration_s: 120             # skip anything shorter (already a short)
+
+moments:
+  route: auto                     # auto = Gemini watches the YouTube URL, falls back to transcript
+  chunk_minutes: 30               # Gemini watches long streams in chunks of this size
+  fps: 0.5                        # frames per second Gemini samples (lower = fewer tokens)
+  max_per_chunk: 4
+  preroll_s: 1.0                  # seconds kept before each moment's start
+
+download:
+  max_height: 1080
+  cookies_file: ""                # optional cookies.txt if YouTube asks to sign in
+  backlog_per_campaign: 6         # stop downloading new moments while this many clips wait for review
+
+whisper:
+  model: small.en                 # large-v3 is better but slow without a GPU
+  device: auto
+  compute_type: int8
+
+render:
+  width: 1080
+  height: 1920
+  max_fps: 60
+  crf: 20
+  preset: medium
+  font: Montserrat                # downloaded into assets/fonts by the installer
+  fonts_dir: assets/fonts
+  caption_size: 84
+  words_per_group: 3
+  highlight_color: "&H0000FFFF&"  # ASS colour (BGR): yellow
+  hook_seconds: 2.5
+  blur_fg_height: 760             # gameplay height in the blur layout
+  loudness_lufs: -14
+  music_dir: assets/music         # royalty-free tracks; leave empty for none
+  music_gain_db: -20
+
+llm:
+  # Tried in order. Providers with no key set are skipped.
+  providers:
+    - name: gemini
+      type: gemini
+      model: gemini-3.5-flash     # Google retired gemini-2.5-flash for new keys
+      api_key_env: GEMINI_API_KEY
+      video: true                 # can watch YouTube URLs directly
+    - name: free-llm
+      type: openai                # any OpenAI-compatible API
+      base_url_env: FREE_LLM_BASE_URL
+      api_key_env: FREE_LLM_API_KEY
+      model_env: FREE_LLM_MODEL
+    - name: ollama
+      type: openai
+      base_url: http://localhost:11434/v1
+      api_key: ollama
+      model: llama3.1:8b
+      optional: true              # skip silently when Ollama is not running
+
+schedule:
+  slots: ["09:00", "12:30", "16:00", "19:00", "21:30"]   # US Eastern
+  platform_offset_min: {youtube: 0, instagram: 90, facebook: 120}
+  max_posts_per_account_per_day: 5
+  min_gap_minutes: 120
+  youtube_uploads_per_day: 6      # default API quota allows about 6
+
+stats:
+  every_hours: 6
+
+review:
+  auto_approve_score: 9           # clips the AI scores this high post by themselves; 11 = review everything
+  dashboard_url: http://127.0.0.1:8787
+
+discovery:                        # finds new clipping campaigns and suggests them on Discord
+  enabled: true
+  every_hours: 6
+  apify_actor: fayoussef~whop-clipping-campaigns-scraper   # reads Whop's public campaign listings
+  apify_input: {}
+  max_listings: 40
+  max_suggestions_per_run: 5
+  min_rate_per_1k: 0.5            # skip campaigns paying less than this
+  min_budget_left: 500            # skip campaigns with less budget left than this (USD)
+  interests: []                   # e.g. ["gta", "gaming", "stream", "podcast"]; empty = any topic
+
+accounts:
+  youtube:
+    main:
+      client_secrets: secrets/client_secret.json
+      token_file: secrets/youtube_main.json
+  instagram:
+    main:
+      user_id_env: IG_MAIN_USER_ID
+      token_env: IG_MAIN_TOKEN
+  facebook:
+    main:
+      page_id_env: FB_MAIN_PAGE_ID
+      token_env: FB_MAIN_PAGE_TOKEN
+
+# Platforms where the tool prepares each clip and you post it yourself: the video and caption land on
+# Telegram, and you mark it live on Discord with !posted.
+# A platform with its keys set in .env posts automatically instead.
+# Add tiktok only if you can use TikTok where you are (it is blocked in India).
+manual_platforms: [instagram, facebook]
+
+graph_api_version: v21.0

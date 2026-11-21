@@ -1,0 +1,76 @@
+CLIP FACTORY - SETUP STEPS (Windows)
+====================================
+
+The installer does the technical work. You only create the accounts and copy keys,
+because those need your own logins.
+
+STEP 1 - Install (5-10 minutes)
+  1. Unzip clip-factory.zip anywhere (for example Downloads).
+  2. Double-click "INSTALL ON WINDOWS.bat".
+     If Windows shows "Windows protected your PC", click More info > Run anyway.
+  3. It creates "Clipping Tools" on your Desktop, installs Python, FFmpeg and Deno,
+     and sets Clip Factory to start by itself at login and whenever the internet connects.
+  4. When it asks for keys, paste the ones you have and press Enter to skip the rest.
+     You can run the installer again any time to add keys; it keeps everything.
+
+STEP 2 - Keys to collect (free)
+  a) Gemini key: aistudio.google.com > Get API key
+  b) Your free LLM API: base URL, key and model name from your provider
+  c) Discord bot (alerts and control):
+     - discord.com/developers/applications > New Application > Bot > Reset Token > copy it
+     - On the same Bot page, turn on "Message Content Intent"
+     - OAuth2 > URL Generator > tick "bot", then Send Messages, Attach Files,
+       Read Message History, View Channels > open the link > add the bot to your server
+     - Discord Settings > Advanced > Developer Mode ON
+     - Right-click your channel > Copy Channel ID; right-click your name > Copy User ID
+  d) Apify token (campaign finder): apify.com > sign up > Settings > Integrations > API token
+
+STEP 3 - YouTube (about 20 minutes)
+  1. console.cloud.google.com > New project "clip-factory"
+  2. APIs & Services > Library > enable "YouTube Data API v3" and "YouTube Analytics API"
+  3. Credentials > Create credentials > API key > copy it (this is YOUTUBE_API_KEY)
+  4. OAuth consent screen > External > fill the app name and your email > Publish app
+     (if it stays in "Testing", Google logs the tool out every 7 days)
+  5. Credentials > Create credentials > OAuth client ID > Desktop app > Download JSON
+  6. Rename the file to client_secret.json and put it in Desktop\Clipping Tools\secrets\
+  7. Run the installer again: a browser opens, pick your channel, click Allow
+  8. Submit Google's YouTube API audit form; until it is approved, API uploads stay private
+
+STEP 4 - Instagram and Facebook (about 30 minutes, optional at first)
+  1. Instagram app: switch to a Professional account (Creator or Business)
+  2. Create a Facebook Page and link the Instagram account to it
+  3. developers.facebook.com > Create app (Business) > add Instagram
+  4. Graph API Explorer: get a user token with instagram_basic, instagram_content_publish,
+     instagram_manage_insights, pages_show_list, pages_read_engagement, pages_manage_posts,
+     publish_video > exchange it for a long-lived token
+  5. me/accounts gives your Page ID and Page token;
+     <page-id>?fields=instagram_business_account gives your Instagram user ID
+  6. Run the installer again and paste them
+  7. Every 2 months: make a new long-lived Instagram token and paste it again
+
+STEP 4b - Telegram, for Instagram clips you post yourself (5 minutes)
+  1. In Telegram, open @BotFather, send /newbot, pick a name. Copy the token it gives you.
+  2. Open your new bot and press Start (send it any message).
+  3. In a browser open: https://api.telegram.org/bot<TOKEN>/getUpdates
+     and copy the number after "chat":{"id":  (that is your chat ID)
+  4. Open .env (in PowerShell: notepad .env inside Clipping Tools) and fill in
+     TELEGRAM_BOT_TOKEN= and TELEGRAM_CHAT_ID=, then save and restart Clip Factory.
+  5. When an Instagram clip is due, the bot sends the video, then the caption.
+     Post it, then reply to the caption message with your Instagram link.
+
+STEP 5 - Every day (5-10 minutes, all on Discord)
+  - New campaign found: open the link, Join on Whop, then tap Activate
+  - Clip ready (scored under 9): tap a title to post it, or Reject
+  - Live now: paste the link on the campaign page within 30 minutes, then tap Submitted
+  - Type !help in your channel to see every command
+
+YOUR OWN GTA 6 CHANNEL
+  Put recordings in: Videos\GTA6 recordings. Clips are made and posted by themselves.
+
+USEFUL
+  - Dashboard: double-click "Open Dashboard" in the folder (http://127.0.0.1:8787)
+  - Stop for now: "Stop Clip Factory"   Start again: "Start Clip Factory"
+  - Logs: Desktop\Clipping Tools\logs
+  - Turn auto-start off: right-click windows\uninstall.ps1 > Run with PowerShell
+  - The laptop must be on and awake for Instagram and Facebook posts to go out on time.
+    YouTube posts go out on schedule even if the laptop is off.

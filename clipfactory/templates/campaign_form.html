@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if cid else 'Add' }} campaign · Clip Factory{% endblock %}
+{% block body %}
+<style>
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px 20px}
+.form label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);font-weight:500}
+.form .wide{grid-column:1/-1}
+textarea{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--fg);resize:vertical}
+.checks{display:flex;gap:16px;flex-wrap:wrap;color:var(--fg);font-size:14px}
+.checks label{flex-direction:row;align-items:center;color:var(--fg);font-size:14px}
+.msg{padding:10px 14px;border-radius:8px;font-size:14px}
+.msg.note{background:var(--ai-soft);color:var(--fg)}
+.msg.err{background:var(--bad-soft);color:var(--bad)}
+.step{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+</style>
+<div>
+  <p class="muted" style="margin:0 0 4px"><a href="{{ url_for('campaigns_page') }}">Campaigns</a> /</p>
+  <h1>{{ 'Edit campaign' if cid else 'Add a campaign' }}</h1>
+</div>
+
+{% for e in errors %}<div class="msg err">{{ e }}</div>{% endfor %}
+{% for n in notes %}<div class="msg note">{{ n }}</div>{% endfor %}
+
+<section class="panel">
+  <span class="step">Step 1 · optional</span>
+  <h2 style="margin-top:4px">Let the AI read the campaign page</h2>
+  <p class="muted" style="margin:0 0 12px">Open the campaign on Whop (or any clipping platform), select all the text on the page, copy it, and paste it here. The AI fills in the form below. You check it and save.</p>
+  <form method="post" action="{{ url_for('campaign_extract') }}" style="display:flex;flex-direction:column;gap:10px">
+    {% if cid %}<input type="hidden" name="cid" value="{{ cid }}">{% endif %}
+    <textarea id="brief" name="brief" rows="7" placeholder="Paste the whole campaign page here: rate per 1K views, budget, rules, accepted platforms, links to the creator's content...">{{ f.brief or '' }}</textarea>
+    <div><button class="go">Fill the form with AI</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <span class="step">Step 2</span>
+  <h2 style="margin-top:4px">Campaign details</h2>
+  <form method="post" action="{{ url_for('campaign_save') }}">
+    {% if cid %}<input type="hidden" name="cid" value="{{ cid }}">{% endif %}
+    <input type="hidden" name="brief" value="{{ f.brief or '' }}">
+    <div class="form">
+      <label for="f-name">Campaign name<input id="f-name" name="name" value="{{ f.name or '' }}" required></label>
+      <label for="f-platform">Clipping platform<input id="f-platform" name="platform" list="platform-list" value="{{ f.platform or '' }}" placeholder="Whop"></label>
+      <datalist id="platform-list"><option value="Whop"><option value="Vyro"><option value="Clipping Discord"><option value="Direct deal"></datalist>
+      <label for="f-creator">Creator or brand<input id="f-creator" name="creator" value="{{ f.creator or '' }}"></label>
+      <label for="f-url">Campaign page (where you submit clips)<input id="f-url" name="url" value="{{ f.url or '' }}" placeholder="https://whop.com/..."></label>
+      <label for="f-topic">What the content is about<input id="f-topic" name="topic" value="{{ f.topic or '' }}" placeholder="IRL streams, GTA 6 gameplay, business podcast"></label>
+      <label for="f-audience">Target viewers<input id="f-audience" name="audience" value="{{ f.audience or '' }}"></label>
+      <label for="f-rate">Pay per 1,000 views (USD)<input id="f-rate" name="rate_per_1k" inputmode="decimal" value="{{ f.rate_per_1k if f.rate_per_1k is not none else '' }}"></label>
+      <label for="f-budget">Budget left (USD)<input id="f-budget" name="budget_left" inputmode="decimal" value="{{ f.budget_left if f.budget_left is not none else '' }}"></label>
+      <label for="f-cap">Max payout per clip (USD)<input id="f-cap" name="max_payout_per_clip" inputmode="decimal" value="{{ f.max_payout_per_clip if f.max_payout_per_clip is not none else '' }}"></label>
+      <label for="f-minviews">Views before a clip pays<input id="f-minviews" name="min_views" inputmode="numeric" value="{{ f.min_views if f.min_views is not none else '' }}"></label>
+      <label for="f-ends">Ends<input id="f-ends" name="ends" type="date" value="{{ f.ends or '' }}"></label>
+      <label for="f-quota">Clips to post per day<input id="f-quota" name="daily_clip_quota" inputmode="numeric" value="{{ f.daily_clip_quota or 3 }}"></label>
+      <label for="f-minlen">Shortest clip (seconds)<input id="f-minlen" name="min_len" inputmode="numeric" value="{{ f.min_len or 20 }}"></label>
+      <label for="f-maxlen">Longest clip (seconds)<input id="f-maxlen" name="max_len" inputmode="numeric" value="{{ f.max_len or 55 }}"></label>
+      <label for="f-score">Lowest AI score to keep (1–10)<input id="f-score" name="min_score" inputmode="decimal" value="{{ f.min_score or 7 }}"></label>
+      <label for="f-tags">Required hashtags<input id="f-tags" name="required_hashtags" value="{{ f.required_hashtags or '' }}" placeholder="#GTA6 #Sponsor"></label>
+      <label for="f-credit">Credit line in every caption<input id="f-credit" name="credit" value="{{ f.credit or '' }}" placeholder="Credit: @creator"></label>
+      <div class="wide">
+        <span class="muted" style="font-size:13px;font-weight:500">Post to</span>
+        <div class="checks" style="margin-top:6px">
+          {% for p in ['youtube','instagram','facebook','tiktok'] %}
+          <label for="f-p-{{ p }}"><input type="checkbox" id="f-p-{{ p }}" name="platforms" value="{{ p }}" {{ 'checked' if p in (f.platforms or []) }}> {{ {'youtube':'YouTube Shorts','instagram':'Instagram Reels','facebook':'Facebook Reels','tiktok':'TikTok (you post)'}[p] }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <label for="f-sources" class="wide">Where the creator's content comes from, one per line
+        <textarea id="f-sources" name="sources" rows="4" placeholder="https://www.youtube.com/@creator&#10;https://www.twitch.tv/creator&#10;/home/me/Google Drive/Campaign files&#10;https://www.youtube.com/watch?v=...">{{ f.sources or '' }}</textarea>
+        <span>YouTube and Twitch channels are watched for new streams. A folder is watched for new files (for example a synced Google Drive folder the campaign shares). Single video links are clipped once.</span>
+      </label>
+      <label for="f-layout">Video layout
+        <select id="f-layout" name="layout">
+          {% for v, t in [('blur','Full frame on a blurred background'),('facecam_split','Facecam on top, content below'),('crop','Crop to the center')] %}
+          <option value="{{ v }}" {{ 'selected' if f.layout==v }}>{{ t }}</option>{% endfor %}
+        </select></label>
+      <label for="f-rules" class="wide">Other campaign rules the AI must follow, one per line
+        <textarea id="f-rules" name="rules" rows="4" placeholder="No clips of sponsor segments&#10;Show the creator's face in the first 3 seconds">{{ f.rules or '' }}</textarea></label>
+    </div>
+    <div class="row" style="margin-top:20px"><button class="go">Save campaign</button><a class="btn" href="{{ url_for('campaigns_page') }}">Cancel</a></div>
+  </form>
+</section>
+{% endblock %}

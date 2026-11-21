@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Posts · Clip Factory{% endblock %}
+{% block body %}
+<div>
+  <h1>Posts and submissions</h1>
+  <p class="muted" style="margin:4px 0 0">Submit each live post on its campaign page, then mark it submitted here. Earnings are estimates from each campaign's rate.</p>
+</div>
+<section class="panel scroll">
+<table>
+  <tr><th>When (ET)</th><th>Clip</th><th>Platform</th><th>Status</th><th class="num">Views</th><th class="num">Est. $</th><th>Campaign submission</th></tr>
+  {% for p in posts %}
+  <tr>
+    <td class="mono">{{ p.scheduled_at|et }}</td>
+    <td>{{ p.title }}<div class="muted" style="font-size:13px">{{ p.campaign }}</div></td>
+    <td>{{ p.platform.title() }}</td>
+    <td>{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.status }}</a>{% else %}<span class="{{ 'chip budget' if p.status=='failed' else 'chip' }}" title="{{ p.error or '' }}">{{ p.status }}</span>{% endif %}</td>
+    <td class="num">{{ p.views|num }}</td>
+    <td class="num">{{ '$%.2f'|format(p.earned) if p.rate_per_1k else '–' }}</td>
+    <td>{% if not p.campaign_url %}<span class="muted">Not a paid campaign</span>
+        {% elif p.submitted %}<span class="chip running">submitted</span>
+        {% elif p.status=='posted' %}<div class="row" style="gap:6px"><a class="btn" href="{{ p.campaign_url }}" target="_blank" rel="noopener">Open campaign</a>
+          <form method="post" action="{{ url_for('mark_submitted', post_id=p.id) }}"><button>Mark submitted</button></form></div>
+        {% else %}<span class="muted">After it goes live</span>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="muted">No posts yet.</td></tr>{% endfor %}
+</table>
+</section>
+{% endblock %}

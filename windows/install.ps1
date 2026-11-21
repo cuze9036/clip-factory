@@ -6,6 +6,15 @@
 param([switch]$Update)  # -Update: replace the code, keep keys, ask nothing
 
 $ErrorActionPreference = "Stop"
+# During an automatic update nobody is watching: if anything fails, still start Clip Factory again.
+trap {
+    if ($Update) {
+        $log = Join-Path ([Environment]::GetFolderPath("Desktop")) "Clipping Tools\logs\update-errors.log"
+        Add-Content -Path $log -Value "$(Get-Date -Format s)  Update failed: $_" -ErrorAction SilentlyContinue
+        Start-ScheduledTask -TaskName "Clip Factory" -ErrorAction SilentlyContinue
+    }
+    break
+}
 $Source = Split-Path -Parent $PSScriptRoot
 $Desktop = [Environment]::GetFolderPath("Desktop")
 $Target = Join-Path $Desktop "Clipping Tools"
@@ -100,8 +109,12 @@ $vpy = Join-Path $venv "Scripts\python.exe"
 if ($LASTEXITCODE -ne 0) { throw "Installing Python packages failed" }
 if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     # NVIDIA GPU: libraries that let captions run on the GPU (about 1 GB, downloaded once).
-    & $vpy -m pip install --quiet "nvidia-cublas-cu12" "nvidia-cudnn-cu12==9.*"
-    if ($LASTEXITCODE -eq 0) { Ok "GPU libraries for captions installed" } else { Warn "GPU libraries didn't install; captions use the CPU" }
+    # Never fatal: without these, captions simply run on the CPU.
+    $ErrorActionPreference = "Continue"
+    & $vpy -m pip install --quiet "nvidia-cublas-cu12" "nvidia-cudnn-cu12==9.*" 2>&1 | Out-File -Append -FilePath (Join-Path $Target "logs\gpu-libs.log")
+    $ok = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = "Stop"
+    if ($ok) { Ok "GPU libraries for captions installed" } else { Warn "GPU libraries didn't install; captions use the CPU" }
 }
 $cf = Join-Path $venv "Scripts\clipfactory.exe"
 Ok "Packages installed"

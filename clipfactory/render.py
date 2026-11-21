@@ -113,11 +113,36 @@ def render(raw, out, words, hook, layout="blur", facecam=None):
               f"[voice][m]amix=inputs=2:duration=first:normalize=0[a]")
     else:
         af = f"[0:a]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]"
-    cmd += ["-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
-            "-c:v", "libx264", "-preset", cfg.get("preset", "medium"), "-crf", str(cfg.get("crf", 20)),
-            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", out]
-    run(cmd)
+    cmd += ["-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}"]
+    tail = ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", out]
+    cpu = ["-c:v", "libx264", "-preset", cfg.get("preset", "medium"), "-crf", str(cfg.get("crf", 20))]
+    if use_nvenc(cfg):
+        gpu = ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", str(cfg.get("crf", 20) + 1), "-b:v", "0"]
+        try:
+            run(cmd + gpu + tail)
+            return {"path": str(out), "duration": dur}
+        except RuntimeError as e:
+            from . import db
+            db.kv_set("nvenc_ok", False)
+            db.log(None, f"GPU video encoding failed ({str(e)[-120:]}); using the CPU from now on", "warn")
+    run(cmd + cpu + tail)
     return {"path": str(out), "duration": dur}
+
+
+def use_nvenc(cfg):
+    """encoder: auto uses the NVIDIA encoder when FFmpeg has it and it hasn't failed before."""
+    choice = cfg.get("encoder", "auto")
+    if choice == "cpu":
+        return False
+    from . import db
+    if db.kv_get("nvenc_ok") is False and choice == "auto":
+        return False
+    import subprocess
+    try:
+        out = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return "h264_nvenc" in out
 
 
 def _pick_music(cfg):

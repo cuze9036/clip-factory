@@ -30,6 +30,7 @@ render:
   max_fps: 60
   crf: 20
   preset: medium
+  encoder: auto                   # auto = NVIDIA GPU (NVENC) when available, else CPU; or nvenc / cpu
   font: Montserrat                # downloaded into assets/fonts by the installer
   fonts_dir: assets/fonts
   caption_size: 84

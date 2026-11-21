@@ -7,9 +7,39 @@ _model = None
 GPU_ERRORS = ("cublas", "cudnn", "cuda", "cudart")
 
 
+def _nvidia_dirs():
+    """bin folders of the nvidia-cublas-cu12 / nvidia-cudnn-cu12 pip packages, if installed."""
+    import glob
+    import os
+    import site
+    dirs = []
+    for base in site.getsitepackages() + [site.getusersitepackages()]:
+        dirs += glob.glob(os.path.join(base, "nvidia", "*", "bin")) + glob.glob(os.path.join(base, "nvidia", "*", "lib"))
+    return [d for d in dirs if os.path.isdir(d)]
+
+
+def _use_nvidia_libs():
+    import os
+    dirs = _nvidia_dirs()
+    for d in dirs:
+        if d not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(d)
+            except OSError:
+                pass
+    # Libraries installed after an earlier CPU fallback: give the GPU one more chance.
+    if dirs and db.kv_get("whisper_cpu_only") and not db.kv_get("whisper_gpu_retried"):
+        db.kv_set("whisper_gpu_retried", True)
+        db.kv_set("whisper_cpu_only", False)
+    return bool(dirs)
+
+
 def _get():
     global _model
     if _model is None:
+        _use_nvidia_libs()
         from faster_whisper import WhisperModel
         cfg = config.section("whisper")
         device = cfg.get("device", "auto")
@@ -17,6 +47,7 @@ def _get():
             device = "cpu"
         _model = WhisperModel(cfg.get("model", "small.en"), device=device,
                               compute_type=cfg.get("compute_type", "int8"))
+        _model._cf_device = device
     return _model
 
 

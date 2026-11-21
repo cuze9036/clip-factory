@@ -138,12 +138,25 @@ def _render():
     return "speech model loaded, 1080x1920 clip with captions made"
 
 
+def _gpu():
+    import shutil as sh
+    from . import db, render, transcribe
+    if not sh.which("nvidia-smi"):
+        raise _Skip("no NVIDIA GPU found; everything runs on the CPU")
+    speech = "CPU (GPU libraries missing)" if db.kv_get("whisper_cpu_only") else "GPU"
+    video = "GPU (NVENC)" if render.use_nvenc(config.section("render")) else "CPU"
+    if not transcribe._nvidia_dirs():
+        speech += "; run the installer again to add the GPU libraries"
+    return f"captions on {speech}, video encoding on {video}"
+
+
 CHECKS = [
     ("FFmpeg", _tool("ffmpeg")), ("Deno (for YouTube downloads)", _tool("deno")),
     ("Gemini", _gemini), ("Free LLM API", _free_llm), ("YouTube API key", _youtube_key),
     ("YouTube upload login", _youtube_login), ("Discord", _discord), ("Telegram", _telegram),
     ("Apify (campaign finder)", _apify), ("Reading YouTube videos", _download), ("Caption font", _font),
     ("Making a clip (first run downloads the speech model, about 500 MB)", _render),
+    ("GPU", _gpu),
 ]
 
 

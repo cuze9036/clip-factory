@@ -98,6 +98,11 @@ $vpy = Join-Path $venv "Scripts\python.exe"
 & $vpy -m pip install --upgrade pip --quiet
 & $vpy -m pip install -e $Target --quiet
 if ($LASTEXITCODE -ne 0) { throw "Installing Python packages failed" }
+if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+    # NVIDIA GPU: libraries that let captions run on the GPU (about 1 GB, downloaded once).
+    & $vpy -m pip install --quiet "nvidia-cublas-cu12" "nvidia-cudnn-cu12==9.*"
+    if ($LASTEXITCODE -eq 0) { Ok "GPU libraries for captions installed" } else { Warn "GPU libraries didn't install; captions use the CPU" }
+}
 $cf = Join-Path $venv "Scripts\clipfactory.exe"
 Ok "Packages installed"
 

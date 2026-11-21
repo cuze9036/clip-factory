@@ -107,14 +107,6 @@ $vpy = Join-Path $venv "Scripts\python.exe"
 & $vpy -m pip install --upgrade pip --quiet
 & $vpy -m pip install -e $Target --quiet
 if ($LASTEXITCODE -ne 0) { throw "Installing Python packages failed" }
-if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-    # NVIDIA GPU: libraries that let captions run on the GPU (about 1 GB, downloaded once).
-    # Never fatal: without these, captions simply run on the CPU.
-    $ErrorActionPreference = "Continue"
-    & $vpy -m pip install --quiet "nvidia-cublas-cu12" "nvidia-cudnn-cu12==9.*" 2>&1 | Out-File -Append -FilePath (Join-Path $Target "logs\gpu-libs.log")
-    $ok = ($LASTEXITCODE -eq 0)
-    $ErrorActionPreference = "Stop"
-    if ($ok) { Ok "GPU libraries for captions installed" } else { Warn "GPU libraries didn't install; captions use the CPU" }
 }
 $cf = Join-Path $venv "Scripts\clipfactory.exe"
 Ok "Packages installed"
@@ -248,6 +240,17 @@ foreach ($s in @(@("Start Clip Factory", "start.ps1"), @("Stop Clip Factory", "s
     $lnk.Save()
 }
 Start-ScheduledTask -TaskName $TaskName
+
+# GPU libraries come last, after Clip Factory is already running again, so the bot never waits on this
+# ~1 GB download. They are picked up at the next restart; until then captions run on the CPU.
+if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+    # NVIDIA GPU: libraries that let captions run on the GPU (about 1 GB, downloaded once).
+    # Never fatal: without these, captions simply run on the CPU.
+    $ErrorActionPreference = "Continue"
+    & $vpy -m pip install --quiet "nvidia-cublas-cu12" "nvidia-cudnn-cu12==9.*" 2>&1 | Out-File -Append -FilePath (Join-Path $Target "logs\gpu-libs.log")
+    $ok = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = "Stop"
+    if ($ok) { Ok "GPU libraries for captions installed" } else { Warn "GPU libraries didn't install; captions use the CPU" }
 Start-Sleep -Seconds 8
 if (-not $Update) { Start-Process "http://127.0.0.1:8787/" }
 

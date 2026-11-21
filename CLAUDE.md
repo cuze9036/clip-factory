@@ -9,7 +9,7 @@ Flow: `discovery.py` (Apify listings → suggested campaigns) → `watcher.py` (
 ## Where things happen (keep it this way)
 - Discord (`discord_bot.py`, `commands.py`): all control, alerts, buttons, commands.
 - Telegram (`telegram.py`): only delivers Instagram/Facebook reels (video + caption). No commands.
-- Task "Clip Factory" runs `windows\start.ps1`: auto-start, crash restart, auto-installs new zips from `Desktop\CLIPING TOOL`.
+- Task "Clip Factory" runs `windows\start.ps1`: auto-start, crash restart, installs new GitHub commits (and zips dropped in `Desktop\CLIPING TOOL`) within about a minute.
 
 ## Rules
 - Never log in to or automate the owner's Whop account.
@@ -19,8 +19,8 @@ Flow: `discovery.py` (Apify listings → suggested campaigns) → `watcher.py` (
 - Read logs with `-Tail 30`, never whole files.
 
 ## State
-Set up: Discord, Telegram, Gemini, FreeLLMAPI (`auto:default`), YouTube (OAuth Testing mode: 7-day re-login, uploads private until API audit), Apify free plan (no campaign links).
+Set up: Discord, Telegram, Gemini, FreeLLMAPI (`auto:default`), YouTube (OAuth app In production since 2026-11-21, homepage + privacy policy on GitHub Pages `cuze9036.github.io/clip-factory`; uploads stay private until Google's YouTube API audit), Apify free plan (no campaign links).
 Selftest: 12/12 OK (2026-11-21, Gemini model `gemini-3.5-flash`).
-To do: real clip test with `!add <short GTA video> own-gta6`; first campaign (`!suggested` → join on Whop → `!source 1 <link>` → `!activate 1`); YouTube API audit; GitHub pages to publish the OAuth app.
+To do: real clip test with `!add <short GTA video> own-gta6`; first campaign (`!suggested` → join on Whop → `!source 1 <link>` → `!activate 1`); re-run `clipfactory auth-youtube main` once after publishing (Testing-mode tokens expire after 7 days); YouTube API audit form.
 
 Restart: `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "clipfactory" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Start-ScheduledTask -TaskName "Clip Factory"`

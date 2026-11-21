@@ -79,6 +79,8 @@ class Bot(discord.Client):
     async def on_message(self, message):
         if message.author.bot or not self._allowed(message.author.id, message.channel.id):
             return
+        if not message.content.strip().startswith(("!", "/")):
+            return
         async with message.channel.typing():
             reply = await asyncio.to_thread(commands.handle, message.content)
         if reply:

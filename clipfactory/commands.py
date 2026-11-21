@@ -191,7 +191,8 @@ def ignore(cid):
 
 def handle(text):
     """One typed message -> reply text. Returns None for messages that aren't commands."""
-    text = re.sub(r"^!\s+", "!", (text or "").strip())  # phones often type "! Pause"
+    text = re.sub(r"^[!/]\s*", "!", (text or "").strip())  # "/status", "! Pause" and "!status" all work
+    text = re.sub(r"^(![A-Za-z_]+)@\S+", r"\1", text)  # "/status@ClipBot"
     if not text.startswith("!"):
         return None
     cmd, _, rest = text.partition(" ")

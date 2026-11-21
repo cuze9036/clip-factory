@@ -169,7 +169,7 @@ strong stories, hot takes and useful insights.
 
 Rules:
 - Each moment is {min_len} to {max_len} seconds long and makes sense without context.
-- Start right before the setup, so the payoff lands in the first few seconds of the clip.
+- Start on the action itself (no slow intro), so something happens in the very first second.
 - Skip sponsor reads, ads, waiting screens, menus, slurs, and major story spoilers.
 - Use absolute timestamps in the full video (H:MM:SS), between {start} and {end}.
 - Score honestly: 9-10 only for moments you would bet on. Return at most {limit} moments, or [] if none are strong.
@@ -177,7 +177,8 @@ Rules:
 
 Return a JSON array only:
 [{{"start": "H:MM:SS", "end": "H:MM:SS", "category": "funny|crazy|fail|clutch|reaction|shock|story|insight|hot_take",
-  "score": 1-10, "hook": "max 6 words for on-screen text", "why": "one sentence"}}]"""
+  "score": 1-10, "hook": "max 6 words for on-screen text", "why": "one sentence",
+  "language": "two-letter code of the language spoken in this moment, e.g. en, hi, es"}}]"""
 
 MOMENTS_TRANSCRIPT_PROMPT = """You are a senior short-form video editor.
 Content: {topic}. Target viewers: {audience}.
@@ -189,13 +190,14 @@ funny, crazy, rage, fails, clutch plays, shocking events, big reactions, strong 
 
 Rules:
 - Each moment is {min_len} to {max_len} seconds long and makes sense without context.
-- Start right before the setup. Use absolute timestamps (H:MM:SS) taken from the lines.
+- Start on the action itself, no slow intro. Use absolute timestamps (H:MM:SS) taken from the lines.
 - Skip sponsor reads, slurs and major story spoilers. Return at most {limit} moments, or [] if none are strong.
 - Write hook and why in American English.{rules}
 
 Return a JSON array only:
 [{{"start": "H:MM:SS", "end": "H:MM:SS", "category": "funny|crazy|fail|clutch|reaction|shock|story|insight|hot_take",
-  "score": 1-10, "hook": "max 6 words for on-screen text", "why": "one sentence"}}]
+  "score": 1-10, "hook": "max 6 words for on-screen text", "why": "one sentence",
+  "language": "two-letter code of the language spoken in this moment, e.g. en, hi, es"}}]
 
 Windows:
 {windows}"""

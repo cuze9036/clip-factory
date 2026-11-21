@@ -10,7 +10,7 @@ from .util import ET, iso, parse_iso, utcnow
 
 JSON_FIELDS = ("platforms", "accounts", "required_hashtags", "rules")
 POSTABLE = ("youtube", "instagram", "facebook", "tiktok")
-LAYOUTS = ("blur", "facecam_split", "crop")
+LAYOUTS = ("framed", "blur", "facecam_split", "crop")
 FIELDS = ("name", "platform", "creator", "url", "topic", "audience", "rate_per_1k", "budget_left",
           "max_payout_per_clip", "min_views", "ends", "daily_clip_quota", "platforms", "accounts",
           "required_hashtags", "credit", "min_len", "max_len", "min_score", "max_moments_per_video", "priority",
@@ -155,7 +155,7 @@ def _clean(c):
         if v in (None, ""):
             return default
         return cast(str(v).replace("$", "").replace(",", "").strip())
-    lo, hi = (c.get("clip_length") or [c.get("min_len") or 20, c.get("max_len") or 55])[:2]
+    lo, hi = (c.get("clip_length") or [c.get("min_len") or 12, c.get("max_len") or 30])[:2]
     tags = c.get("required_hashtags") or []
     if isinstance(tags, str):
         tags = tags.split()
@@ -182,8 +182,8 @@ def _clean(c):
         "accounts": json.dumps({p: accounts.get(p, "main") for p in platforms}),
         "required_hashtags": json.dumps(tags),
         "credit": (c.get("credit") or "").strip(),
-        "min_len": int(num(lo, float, 20)),
-        "max_len": int(num(hi, float, 55)),
+        "min_len": int(num(lo, float, 12)),
+        "max_len": int(num(hi, float, 30)),
         "min_score": num(c.get("min_score"), default=7.0),
         "max_moments_per_video": num(c.get("max_moments_per_video"), int, 8),
         "priority": num(c.get("priority"), int, 5),

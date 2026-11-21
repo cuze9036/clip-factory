@@ -21,6 +21,7 @@ Flow: `discovery.py` (Apify listings → suggested campaigns) → `watcher.py` (
 ## State
 Set up: Discord, Telegram, Gemini, FreeLLMAPI (`auto:default`), YouTube (OAuth app In production since 2026-11-21, homepage + privacy policy on GitHub Pages `cuze9036.github.io/clip-factory`; uploads stay private until Google's YouTube API audit), Apify free plan (no campaign links).
 Selftest: 12/12 OK (2026-11-21, Gemini model `gemini-3.5-flash`).
-To do: real clip test with `!add <short GTA video> own-gta6`; first campaign (`!suggested` → join on Whop → `!source 1 <link>` → `!activate 1`); re-run `clipfactory auth-youtube main` once after publishing (Testing-mode tokens expire after 7 days); YouTube API audit form.
+End-to-end clip test works (2026-11-21). Look: `framed` layout (white background, CAPS title above the video for the whole clip, 1-2 word captions below, credit line), 12-30 s clips, English-only speech. Focus: paid campaigns; the owner's GTA 6 lane moves to a separate YouTube account later.
+To do: first campaign (`!suggested` → join on Whop → `!source 1 <link>` → `!activate 1`); re-run `clipfactory auth-youtube main` once after publishing (Testing-mode tokens expire after 7 days); YouTube API audit form.
 
 Restart: `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match "clipfactory" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Start-ScheduledTask -TaskName "Clip Factory"`

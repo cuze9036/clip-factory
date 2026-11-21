@@ -24,7 +24,7 @@ campaigns:
     platforms: [youtube, instagram]
     required_hashtags: ["#GTA6"]
     credit: "Credit: @StreamerHandle"
-    clip_length: [20, 55]
+    clip_length: [12, 30]
     min_score: 7                      # moments the AI scores below this are skipped
     priority: 1                       # lower number = first pick of posting slots
     rules:
@@ -44,13 +44,13 @@ campaigns:
     daily_clip_quota: 2
     platforms: [youtube, instagram]
     required_hashtags: ["#GTA6", "#GTAVI"]
-    clip_length: [20, 55]
+    clip_length: [12, 30]
     min_score: 7
     priority: 5                       # campaigns that pay get the best posting slots first
     sources:
       - kind: folder                  # drop your own GTA 6 recordings here
         path: ~/Videos/GTA6 recordings
-        layout: blur
+        layout: framed
       # - kind: youtube_channel       # or your own YouTube channel's streams
       #   channel_id: "@YourChannel"
       #   streams_only: true
@@ -79,4 +79,4 @@ campaigns:
         facecam: [0.0, 0.0, 0.5, 1.0]
       - kind: folder                  # raw files the campaign shares, e.g. a synced Google Drive folder
         path: ~/Google Drive/Example Podcast raw
-        layout: blur
+        layout: framed

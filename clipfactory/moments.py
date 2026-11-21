@@ -26,7 +26,8 @@ def _validator(chunk_start, chunk_end, limit):
             hook, why = str(m.get("hook", ""))[:60], str(m.get("why", ""))[:300]
             llm.require_english(hook, why)
             cat = str(m.get("category", "")).lower()
-            out.append({"start": s, "end": e, "score": float(m.get("score", 0)),
+            lang = str(m.get("language") or "en").strip().lower()[:2]
+            out.append({"start": s, "end": e, "score": float(m.get("score", 0)), "language": lang,
                         "category": cat if cat in CATEGORIES else "reaction", "hook": hook, "why": why})
         return out
     return validate
@@ -158,6 +159,17 @@ def analyze(v, c):
     if used is None:
         raw, provider = via_transcript(v, c)
         used = "transcript"
+    if config.section("moments").get("english_only", True) and raw:
+        other = [m["language"] for m in raw if m.get("language", "en") != "en"]
+        if len(other) * 2 > len(raw):
+            lang = max(set(other), key=other.count)
+            db.x("UPDATE videos SET status='skipped', route=?, analyzed_at=?, error=? WHERE id=? AND campaign_id=?",
+                 used, iso(utcnow()), f"not English ({lang})", v["id"], c["id"])
+            from . import notify
+            notify.send("progress", f"Skipped \"{v['title']}\" ({c['name']}): the speech is not English ({lang}). "
+                        "Clips are only made from English videos for US viewers.", campaign_id=c["id"])
+            db.log(c["id"], f"Skipped {v['title']}: not English ({lang})")
+            return []
     picks = _shape(raw, c, v["duration_s"])
     for m in picks:
         db.x("""INSERT INTO moments(video_id, campaign_id, start_s, end_s, score, category, hook, why, created_at)

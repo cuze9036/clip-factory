@@ -8,6 +8,7 @@ watcher:
   min_duration_s: 120             # skip anything shorter (already a short)
 
 moments:
+  english_only: true              # skip videos whose speech isn't English (campaigns target US viewers)
   route: auto                     # auto = Gemini watches the YouTube URL, falls back to transcript
   chunk_minutes: 30               # Gemini watches long streams in chunks of this size
   fps: 0.5                        # frames per second Gemini samples (lower = fewer tokens)
@@ -35,9 +36,15 @@ render:
   fonts_dir: assets/fonts
   caption_size: 84
   words_per_group: 3
-  highlight_color: "&H0000FFFF&"  # ASS colour (BGR): yellow
+  highlight_color: "&H0000D4FF&"  # ASS colour (BGR): #FFD400 yellow
   hook_seconds: 2.5
   blur_fg_height: 760             # gameplay height in the blur layout
+  default_layout: framed          # framed | blur | facecam_split | crop
+  framed_background: white        # white | blur | black (framed layout)
+  framed_video_top: 576           # pixels from the top where the video starts
+  framed_max_video_height: 1000
+  framed_words_per_group: 2
+  title_size: 72
   loudness_lufs: -14
   music_dir: assets/music         # royalty-free tracks; leave empty for none
   music_gain_db: -20

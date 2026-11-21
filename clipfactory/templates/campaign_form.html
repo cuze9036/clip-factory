@@ -71,7 +71,7 @@ textarea{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--lin
       </label>
       <label for="f-layout">Video layout
         <select id="f-layout" name="layout">
-          {% for v, t in [('blur','Full frame on a blurred background'),('facecam_split','Facecam on top, content below'),('crop','Crop to the center')] %}
+          {% for v, t in [('framed','Framed: title above the video, captions below (recommended)'),('blur','Full frame on a blurred background'),('facecam_split','Facecam on top, content below'),('crop','Crop to the center')] %}
           <option value="{{ v }}" {{ 'selected' if f.layout==v }}>{{ t }}</option>{% endfor %}
         </select></label>
       <label for="f-rules" class="wide">Other campaign rules the AI must follow, one per line

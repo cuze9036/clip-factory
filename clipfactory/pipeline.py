@@ -43,10 +43,12 @@ def stage_download(c, limit=2):
 
 
 def _source_layout(v):
+    default = config.section("render").get("default_layout", "framed")
     s = db.one("SELECT layout, facecam FROM sources WHERE id=?", v["source_id"]) if v and v["source_id"] else None
     if not s:
-        return "blur", None
-    return s["layout"], json.loads(s["facecam"]) if s["facecam"] else None
+        return default, None
+    layout = default if s["layout"] in (None, "", "blur", "auto") else s["layout"]
+    return layout, json.loads(s["facecam"]) if s["facecam"] else None
 
 
 def stage_render(c, limit=1):
@@ -57,7 +59,7 @@ def stage_render(c, limit=1):
             words = transcribe.words(clip["raw_path"])
             layout, face = _source_layout(v)
             final = clip["raw_path"].replace("_raw.mp4", "_final.mp4")
-            res = render.render(clip["raw_path"], final, words, m["hook"], layout, face)
+            res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"])
             db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, status='rendered' WHERE id=?",
                  res["path"], res["duration"], json.dumps(words), clip["id"])
         except Exception as e:

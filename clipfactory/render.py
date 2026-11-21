@@ -33,6 +33,67 @@ def group_words(words, size):
     return groups
 
 
+def _keyword(words):
+    """The word to colour in the title: the longest one with 4+ letters."""
+    cands = [w for w in words if len(re.sub(r"[^A-Za-z]", "", w)) >= 4]
+    return max(cands, key=len) if cands else None
+
+
+def build_framed_ass(words, hook, duration, cfg, geo, credit):
+    W, H = cfg["width"], cfg["height"]
+    font = cfg.get("font", "Arial")
+    top, vh = geo["top"], geo["vh"]
+    light = cfg.get("framed_background", "white") == "white"
+    title_col, title_out = ("&H00000000", 0) if light else ("&H00FFFFFF", 6)
+    key_col = "&H00303BFF&" if light else "&H0000D4FF&"      # red on white, #FFD400 on dark
+    credit_col = "&H00555555" if light else "&H4CFFFFFF"
+    hl = cfg.get("highlight_color", "&H0000D4FF&")
+    below = top + vh
+    lines = [
+        "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {W}", f"PlayResY: {H}", "WrapStyle: 0", "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, "
+        "Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, "
+        "MarginR, MarginV, Encoding",
+        f"Style: Title,{font},{cfg.get('title_size', 72)},{title_col},{title_col},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,{title_out},0,2,60,60,{H - top + 40},1",
+        f"Style: Cap,{font},{cfg.get('caption_size', 84)},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,8,2,8,80,160,{below + 110},1",
+        f"Style: Credit,{font},34,{credit_col},{credit_col},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,8,60,60,{below + 40},1",
+        "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+    if hook:
+        words_t = _clean(hook).upper().split()
+        key = _keyword(words_t)
+        title = " ".join(f"{{\\c{key_col}}}{w}{{\\c{title_col}&}}" if w == key else w for w in words_t)
+        lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(duration)},Title,,0,0,0,,{title}")
+    if credit:
+        lines.append(f"Dialogue: 1,{_ass_time(0)},{_ass_time(duration)},Credit,,0,0,0,,{_clean(credit)}")
+    groups = group_words(words, cfg.get("framed_words_per_group", 2))
+    for gi, g in enumerate(groups):
+        nxt = groups[gi + 1][0]["s"] if gi + 1 < len(groups) else duration
+        g_end = min(g[-1]["e"] + 0.25, nxt)
+        for wi, w in enumerate(g):
+            start = w["s"]
+            end = g[wi + 1]["s"] if wi + 1 < len(g) else g_end
+            if end <= start:
+                continue
+            text = " ".join(
+                (f"{{\\c{hl}}}{_clean(x['w']).upper()}{{\\c&H00FFFFFF&}}" if j == wi else _clean(x["w"]).upper())
+                for j, x in enumerate(g))
+            lines.append(f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Cap,,0,0,0,,{text}")
+    return "\n".join(lines) + "\n"
+
+
+def framed_geometry(src, cfg):
+    """Full-width video placed near the top third (taller sources are capped so the text still fits)."""
+    W = cfg["width"]
+    sw, sh = max(1, src["width"]), max(1, src["height"])
+    vw, vh = W, int(round(W * sh / sw / 2)) * 2
+    cap = cfg.get("framed_max_video_height", 1000)
+    if vh > cap:
+        vh, vw = cap, int(round(cap * sw / sh / 2)) * 2
+    return {"vw": vw, "vh": vh, "top": cfg.get("framed_video_top", 576)}
+
+
 def build_ass(words, hook, duration, cfg):
     W, H = cfg["width"], cfg["height"]
     font, size = cfg.get("font", "Arial"), cfg.get("caption_size", 84)
@@ -72,6 +133,17 @@ def _escape_filter_path(p):
 
 def video_filter(layout, facecam, cfg, src):
     W, H = cfg["width"], cfg["height"]
+    if layout == "framed":
+        g = framed_geometry(src, cfg)
+        bg = cfg.get("framed_background", "white")
+        fps = min(60, max(24, round(src.get("fps") or 30)))
+        if bg == "blur":
+            back = (f"[0:v]split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+                    f"boxblur=40:2,drawbox=x=0:y=0:w=iw:h=ih:color=black@0.45:t=fill[bg];[b]")
+            return back + f"scale={g['vw']}:{g['vh']}[fg];[bg][fg]overlay=(W-w)/2:{g['top']}[v0]"
+        colour = {"white": "white", "black": "0x0A0A0A"}.get(bg, bg)
+        return (f"color=c={colour}:s={W}x{H}:r={fps}[bg];[0:v]scale={g['vw']}:{g['vh']}[fg];"
+                f"[bg][fg]overlay=(W-w)/2:{g['top']}:shortest=1[v0]")
     if layout == "facecam_split" and facecam:
         fx, fy, fw, fh = facecam
         face_h = int(H / 3) // 2 * 2
@@ -87,13 +159,16 @@ def video_filter(layout, facecam, cfg, src):
             f"[b]scale=-2:{fg_h},crop='min(iw,{W})':{fg_h}[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[v0]")
 
 
-def render(raw, out, words, hook, layout="blur", facecam=None):
+def render(raw, out, words, hook, layout="blur", facecam=None, credit=""):
     cfg = config.section("render")
     raw, out = pathlib.Path(raw), pathlib.Path(out)
     src = ffprobe(raw)
     dur = src["duration"]
     ass = out.with_suffix(".ass")
-    ass.write_text(build_ass(words, hook, dur, cfg), encoding="utf-8")
+    if layout == "framed":
+        ass.write_text(build_framed_ass(words, hook, dur, cfg, framed_geometry(src, cfg), credit), encoding="utf-8")
+    else:
+        ass.write_text(build_ass(words, hook, dur, cfg), encoding="utf-8")
 
     vf = video_filter(layout, facecam, cfg, src)
     fps = f",fps={cfg.get('max_fps', 60)}" if src["fps"] > cfg.get("max_fps", 60) + 0.5 else ""

@@ -107,7 +107,6 @@ $vpy = Join-Path $venv "Scripts\python.exe"
 & $vpy -m pip install --upgrade pip --quiet
 & $vpy -m pip install -e $Target --quiet
 if ($LASTEXITCODE -ne 0) { throw "Installing Python packages failed" }
-}
 $cf = Join-Path $venv "Scripts\clipfactory.exe"
 Ok "Packages installed"
 
@@ -251,6 +250,7 @@ if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     $ok = ($LASTEXITCODE -eq 0)
     $ErrorActionPreference = "Stop"
     if ($ok) { Ok "GPU libraries for captions installed" } else { Warn "GPU libraries didn't install; captions use the CPU" }
+}
 Start-Sleep -Seconds 8
 if (-not $Update) { Start-Process "http://127.0.0.1:8787/" }
 

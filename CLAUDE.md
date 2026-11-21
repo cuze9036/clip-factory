@@ -14,7 +14,7 @@ Flow: `discovery.py` (Apify listings → suggested campaigns) → `watcher.py` (
 ## Rules
 - Never log in to or automate the owner's Whop account.
 - Never print or commit `.env`, `secrets\`, tokens.
-- Updates replace this folder's files (keys, data and `config.local.yaml` are kept). Put laptop-only settings in `config.local.yaml`, never edit `config.yaml` for them. Code fixes must also be sent to the owner's main chat so the next update keeps them.
+- Code lives on GitHub: cuze9036/clip-factory (public, no secrets). The laptop installs every new commit on `main` within about a minute (`windows\start.ps1`), replacing this folder's files but keeping keys, data and `config.local.yaml`. So never edit code here without it reaching GitHub: commit and push if this machine can, otherwise send the fix to the owner's main chat. Laptop-only settings go in `config.local.yaml`.
 - After code changes: bump `VERSION`, run `python -m pyflakes clipfactory`.
 - Read logs with `-Tail 30`, never whole files.
 

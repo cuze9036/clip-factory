@@ -1,6 +1,7 @@
 # Runs Clip Factory in the background: waits for internet, starts the dashboard and the pipeline,
-# restarts the pipeline if it stops, and installs updates by itself: save a new Clip Factory zip into
-# Desktop\CLIPING TOOL (or Downloads) and it is installed within about a minute.
+# restarts the pipeline if it stops, and installs updates by itself within about a minute:
+# new commits on GitHub (update.github_repo in config.yaml), or a new Clip Factory zip saved into
+# Desktop\CLIPING TOOL (or Downloads).
 # Task Scheduler runs this at login and when the network connects.
 
 $Root = Split-Path -Parent $PSScriptRoot
@@ -70,9 +71,46 @@ function Check-Update {
     if (-not $zip -or $zip.LastWriteTimeUtc.Ticks -le (Installed-Stamp)) { return }
     Set-Content -Path $StampFile -Value $zip.LastWriteTimeUtc.Ticks
     Log "Update found: $($zip.FullName). Installing."
+    Install-FromZip $zip.FullName
+}
+
+# ---------- updates from GitHub ----------
+$Repo = (Select-String -Path (Join-Path $Root "config.yaml") -Pattern '^\s*github_repo:\s*([\w.-]+/[\w.-]+)' |
+         Select-Object -First 1).Matches.Groups[1].Value
+$ShaFile = Join-Path $Logs "last-sha.txt"
+$script:Etag = $null
+
+function Latest-Sha {
+    # A conditional request: "nothing new" (304) doesn't count against GitHub's hourly limit.
+    $headers = @{ "Accept" = "application/vnd.github.sha"; "User-Agent" = "clip-factory-updater" }
+    if ($script:Etag) { $headers["If-None-Match"] = $script:Etag }
+    try {
+        $r = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/$Repo/commits/main" -Headers $headers -TimeoutSec 20
+    } catch { return $null }
+    $script:Etag = $r.Headers["ETag"]
+    $body = $r.Content
+    if ($body -is [byte[]]) { $body = [Text.Encoding]::ASCII.GetString($body) }
+    return "$body".Trim()
+}
+
+function Check-GitHub {
+    if (-not $Repo) { return }
+    $sha = Latest-Sha
+    if (-not $sha -or $sha -notmatch '^[0-9a-f]{40}$') { return }
+    $last = if (Test-Path $ShaFile) { "$(Get-Content $ShaFile -TotalCount 1)".Trim() } else { "" }
+    if (-not $last) { Set-Content -Path $ShaFile -Value $sha; return }   # first run: what's installed counts as current
+    if ($sha -eq $last) { return }
+    Set-Content -Path $ShaFile -Value $sha
+    Log "GitHub update $($sha.Substring(0, 7)) found. Installing."
+    $zip = Join-Path $env:TEMP "clip-factory-github.zip"
+    Invoke-WebRequest -UseBasicParsing -Uri "https://codeload.github.com/$Repo/zip/$sha" -OutFile $zip -TimeoutSec 180
+    Install-FromZip $zip
+}
+
+function Install-FromZip($path) {
     $tmp = Join-Path $env:TEMP "clip-factory-autoupdate"
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-    Expand-Archive -Path $zip.FullName -DestinationPath $tmp -Force
+    Expand-Archive -Path $path -DestinationPath $tmp -Force
     $installer = Get-ChildItem $tmp -Recurse -Filter install.ps1 | Where-Object { $_.Directory.Name -eq "windows" } | Select-Object -First 1
     # The installer stops this runner, replaces the files and starts Clip Factory again.
     Start-Process powershell.exe -WindowStyle Hidden `
@@ -100,10 +138,13 @@ try {
         $p = Start-Process -FilePath $Cf -ArgumentList "run" -WorkingDirectory $Root -WindowStyle Hidden `
             -RedirectStandardOutput (Join-Path $Logs "clipfactory-$stamp.log") `
             -RedirectStandardError (Join-Path $Logs "clipfactory-$stamp-errors.log") -PassThru
+        $tick = 0
         while (-not $p.HasExited) {
             Start-Sleep -Seconds 20
             if ($dash.HasExited) { $dash = Start-Dashboard }
             try { Check-Update } catch { Log "Update check failed: $_" }
+            $tick++
+            if ($tick % 3 -eq 0) { try { Check-GitHub } catch { Log "GitHub check failed: $_" } }   # about once a minute
         }
         Log "Pipeline stopped (exit code $($p.ExitCode)); restarting in 30 seconds"
         Get-ChildItem $Logs -Filter "clipfactory-*.log" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-14) } |

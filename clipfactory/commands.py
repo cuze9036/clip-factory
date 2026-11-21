@@ -14,7 +14,7 @@ HELP = """**Clip Factory commands**
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
 `!add <video link> <campaign id>` clip one video
 `!find` look for new campaigns now
-`!selftest` check every part of the tool (takes 1-5 min) · `!version` which version is running"""
+`!selftest` check every part of the tool (takes 1-5 min) · `!version` which version is running · `!retry` remake failed clips"""
 
 
 def version():
@@ -260,6 +260,15 @@ def handle(text):
             from . import discovery
             cid, ok = discovery.add_from_text(rest, origin="pasted")
             return None  # the suggestion message with buttons comes from the outbox
+        if cmd == "!retry":
+            clips = db.q("SELECT id FROM clips WHERE status='failed' AND raw_path IS NOT NULL")
+            moms = db.q("SELECT id FROM moments WHERE status='failed'")
+            db.x("UPDATE clips SET status='downloaded', error=NULL WHERE status='failed' AND raw_path IS NOT NULL")
+            db.x("UPDATE moments SET status='found', error=NULL WHERE status='failed'")
+            if not clips and not moms:
+                return "Nothing failed, nothing to retry."
+            return (f"Retrying {len(clips)} clip(s) and {len(moms)} moment(s). "
+                    "They'll show up here in about 5-15 minutes.")
         if cmd == "!selftest":
             from . import selftest
             return selftest.run_all()

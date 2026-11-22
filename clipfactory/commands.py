@@ -13,7 +13,7 @@ HELP = """**Clip Factory commands**
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
 `!add <video link> <campaign id>` clip one video
-`!find` look for new campaigns now
+`!find` look for new campaigns now · `!emails` Google audit emails from the last 7 days
 `!selftest` check every part of the tool (takes 1-5 min) · `!version` which version is running · `!retry` remake failed clips · `!remake <clip>` remake one clip with the current look"""
 
 
@@ -283,6 +283,9 @@ def handle(text):
             return selftest.run_all()
         if cmd == "!version":
             return f"Clip Factory version {version()}"
+        if cmd == "!emails":
+            from . import gmail_watch
+            return gmail_watch.emails_command()
         if cmd == "!find":
             from . import discovery
             db.kv_set("discovery_last_run", None)

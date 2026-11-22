@@ -26,6 +26,8 @@ def main(argv=None):
     sub.add_parser("stats", help="refresh views now")
     au = sub.add_parser("auth-youtube", help="connect a YouTube channel")
     au.add_argument("account", nargs="?", default="main")
+    ag = sub.add_parser("auth-gmail", help="connect Gmail (read-only) to watch for Google's YouTube API audit emails")
+    ag.add_argument("account", nargs="?", default="main")
     fy = sub.add_parser("forget-youtube", help="revoke the YouTube login and delete its token and YouTube statistics")
     fy.add_argument("account", nargs="?", default="main")
     d = sub.add_parser("dashboard", help="open the local dashboard")
@@ -92,6 +94,9 @@ def main(argv=None):
     elif args.cmd == "auth-youtube":
         from . import publish
         publish.youtube_auth(args.account)
+    elif args.cmd == "auth-gmail":
+        from . import gmail_watch
+        gmail_watch.auth(args.account)
     elif args.cmd == "forget-youtube":
         from . import publish
         revoked, n = publish.youtube_forget(args.account)

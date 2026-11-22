@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, at TEXT, campaign_id T
 CREATE TABLE IF NOT EXISTS outbox(
   id INTEGER PRIMARY KEY, kind TEXT, campaign_id TEXT, clip_id INTEGER, post_id INTEGER, text TEXT,
   file_path TEXT, buttons TEXT, created_at TEXT, sent_at TEXT, message_id TEXT, error TEXT);
+CREATE TABLE IF NOT EXISTS gmail_seen(
+  id TEXT PRIMARY KEY, subject TEXT, date TEXT, internal_ms INTEGER, summary TEXT, action TEXT, deadline TEXT,
+  seen_at TEXT);
 CREATE TABLE IF NOT EXISTS discovered(key TEXT PRIMARY KEY, campaign_id TEXT, created_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_moments_status ON moments(status, campaign_id);
 CREATE INDEX IF NOT EXISTS idx_clips_status ON clips(status, campaign_id);

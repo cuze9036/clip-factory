@@ -37,11 +37,13 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-si
   <li><b>Upload videos</b> (youtube.upload): to publish short clips to the owner's channel.</li>
   <li><b>View the YouTube account</b> (youtube.readonly): to read the view and like counts of those uploads.</li>
   <li><b>View YouTube Analytics reports</b> (yt-analytics.readonly): to see which countries the views come from.</li>
+  <li><b>Read Gmail messages</b> (gmail.readonly, optional, only on the Google account that owns the Clip Factory Google Cloud project): to find emails from Google about this project's YouTube API audit, compliance or quota. Only emails matching that search are opened. Clip Factory never sends, replies to, deletes, archives or labels any email.</li>
 </ul>
 
 <h2>How the data is used, stored and shared</h2>
 <ul>
-  <li>It is used only to upload the owner's clips and to show the owner how they perform.</li>
+  <li>It is used only to upload the owner's clips, to show the owner how they perform, and to tell the owner about Google's audit emails.</li>
+  <li>To write a short summary of an audit email, its text is sent to the owner's AI provider (Google Gemini, or the owner's own fallback model), and the summary is posted to the owner's private Discord channel. Clip Factory itself does not use email content to train AI models or share it with anyone else; the AI provider's own terms apply to the text it receives.</li>
   <li>The OAuth token and the statistics are stored only on the owner's computer, in a file only the owner's Windows account can read. Nothing is stored on any server run by Clip Factory.</li>
   <li>No Google user data is sold, shared with third parties, or used for advertising. No data from other people's accounts is collected.</li>
   <li>Clip Factory does not use cookies and does not store or read information on users' devices other than its own token and database files.</li>
@@ -50,7 +52,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-si
 
 <h2>Keeping and deleting data</h2>
 <ul>
-  <li>Video statistics are refreshed every few hours. If they cannot be refreshed (for example after access is removed), they are deleted automatically within 30 days.</li>
+  <li>Email subjects and summaries are kept on the owner's computer only. Video statistics are refreshed every few hours. If they cannot be refreshed (for example after access is removed), they are deleted automatically within 30 days.</li>
   <li><b>Remove access at any time</b> on Google's security settings page: <a href="https://security.google.com/settings/security/permissions">security.google.com/settings/security/permissions</a> (also at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>).</li>
   <li><b>Delete all YouTube data</b> with the command <code>clipfactory forget-youtube</code>. It revokes the token at Google, deletes it from the computer, and deletes the stored YouTube statistics right away.</li>
   <li>After access is removed at Google, the stored token stops working at once.</li>

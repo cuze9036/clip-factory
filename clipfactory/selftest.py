@@ -71,7 +71,10 @@ def _telegram():
     c = telegram.creds()
     if not c:
         raise _Skip("TELEGRAM_* not set")
-    r = requests.get(c[0] + "getMe", timeout=20).json()
+    try:
+        r = requests.get(c[0] + "getMe", timeout=20).json()
+    except Exception as e:   # the URL holds the token, so show only the error type
+        raise RuntimeError(f"could not reach Telegram ({type(e).__name__})") from None
     if not r.get("ok"):
         raise RuntimeError(r.get("description", "token refused"))
     return f"bot @{r['result']['username']}"
@@ -151,13 +154,21 @@ def _gpu():
     return f"captions on {speech}, video encoding on {video}"
 
 
+def _gmail():
+    from . import gmail_watch
+    try:
+        return gmail_watch.selftest_line()
+    except gmail_watch.NotConnected as e:
+        raise _Skip(str(e))
+
+
 CHECKS = [
     ("FFmpeg", _tool("ffmpeg")), ("Deno (for YouTube downloads)", _tool("deno")),
     ("Gemini", _gemini), ("Free LLM API", _free_llm), ("YouTube API key", _youtube_key),
     ("YouTube upload login", _youtube_login), ("Discord", _discord), ("Telegram", _telegram),
     ("Apify (campaign finder)", _apify), ("Reading YouTube videos", _download), ("Caption font", _font),
     ("Making a clip (first run downloads the speech model, about 500 MB)", _render),
-    ("GPU", _gpu),
+    ("GPU", _gpu), ("Gmail audit watcher", _gmail),
 ]
 
 

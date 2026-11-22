@@ -94,7 +94,18 @@ discovery:                        # finds new clipping campaigns and suggests th
   min_budget_left: 500            # skip campaigns with less budget left than this (USD)
   interests: []                   # e.g. ["gta", "gaming", "stream", "podcast"]; empty = any topic
 
+gmail_watch:                      # reads Google's YouTube API audit emails (read-only) and posts them to Discord
+  enabled: true                   # does nothing until you run: clipfactory auth-gmail main
+  account: main
+  every_minutes: 30
+  max_per_run: 10
+  query: 'from:google (youtube api OR "api compliance" OR quota OR audit) newer_than:7d'
+
 accounts:
+  gmail:
+    main:                         # the Google account that owns the clip-factory Cloud project
+      client_secrets: secrets/client_secret.json
+      token_file: secrets/gmail_main.json
   youtube:
     main:
       client_secrets: secrets/client_secret.json

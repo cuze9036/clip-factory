@@ -102,6 +102,14 @@ def run_once():
             db.log(None, f"{fn.__module__} error: {e}", "error")
     if _due("stats_last_run", cfg_s.get("every_hours", 6) * 60):
         analytics.refresh()
+    gw = config.section("gmail_watch")
+    if gw.get("enabled", True) and _due("gmail_last_run", gw.get("every_minutes", 30)):
+        db.kv_set("gmail_last_run", iso(utcnow()))
+        try:
+            from . import gmail_watch
+            gmail_watch.check()
+        except Exception as e:
+            db.log(None, f"Gmail audit watcher failed: {str(e)[:200]}", "warn")
     if _due("discovery_last_run", config.section("discovery").get("every_hours", 1) * 60):
         discovery.run()
 

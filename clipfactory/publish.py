@@ -24,6 +24,8 @@ def _account(platform, name):
 
 def mode(platform, account):
     """'auto' when the tool can post there itself, 'manual' when it hands the clip to you, else None."""
+    if platform in (config.get().get("always_manual") or []):
+        return "manual"
     if platform in UPLOADERS and _has_keys(platform, account):
         return "auto"
     if platform in (config.get().get("manual_platforms") or []):
@@ -263,7 +265,7 @@ def run_due():
     done = 0
     for post in due_posts():
         clip = db.one("SELECT * FROM clips WHERE id=?", post["clip_id"])
-        if post.get("mode") == "manual":
+        if post.get("mode") == "manual" or post["platform"] in (config.get().get("always_manual") or []):
             if parse_iso(post["scheduled_at"]) <= utcnow():
                 try:
                     hand_off(post, clip)

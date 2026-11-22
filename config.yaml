@@ -128,6 +128,8 @@ accounts:
 # A platform with its keys set in .env posts automatically instead.
 # Add tiktok only if you can use TikTok where you are (it is blocked in India).
 manual_platforms: [instagram, facebook, tiktok, x]
+always_manual: [youtube]          # YouTube API uploads stay private until Google's audit passes, so you post
+                                  # YouTube Shorts yourself for now. Remove youtube here once the audit is approved.
 
 graph_api_version: v21.0
 

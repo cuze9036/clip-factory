@@ -37,6 +37,12 @@ class PlatformsTest(unittest.TestCase):
         self.assertEqual(publish.mode("x", "main"), "manual")
         self.assertEqual(publish.name("tiktok"), "TikTok")
 
+    def test_youtube_is_yours_to_post_until_the_audit(self):
+        from clipfactory import publish
+        self.assertEqual(publish.mode("youtube", "main"), "manual")
+        with __import__("unittest.mock").mock.patch.dict(publish.config.get(), {"always_manual": []}):
+            self.assertIsNone(publish.mode("youtube", "main"))   # no login in the test: not auto either
+
     def test_x_caption_fits_280(self):
         from clipfactory import publish
         clip = {"title": "HE DID NOT SEE THAT COMING", "hashtags": json.dumps(["#Sponsored", "#music", "#live"]),

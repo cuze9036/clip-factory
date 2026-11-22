@@ -3,7 +3,7 @@
 timezone: America/New_York        # posting slots are US Eastern time
 
 watcher:
-  every_minutes: 15               # how often to check sources for new uploads and ended streams
+  every_minutes: 5                # about how often to check sources (varies 4-6 min); new sources are checked at once
   lookback_days: 3                # ignore videos older than this
   min_duration_s: 120             # skip YouTube/Twitch videos shorter than this (already a short)
   min_file_duration_s: 15         # campaign footage (folders, Dropbox) can be short; skip only tiny files
@@ -77,6 +77,7 @@ schedule:
   platform_offset_min: {youtube: 0, tiktok: 60, instagram: 90, facebook: 120, x: 150}
   max_posts_per_account_per_day: 5
   min_gap_minutes: 120
+  slot_jitter_min: 12             # each post goes out at a random time up to 12 min before/after its slot
   youtube_uploads_per_day: 6      # default API quota allows about 6
 
 stats:

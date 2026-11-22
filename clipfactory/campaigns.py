@@ -138,6 +138,7 @@ def set_sources(campaign_id, items, default_layout="blur"):
 def add_source(campaign_id, line):
     """Add one channel/folder (watched) or video (clipped once) to a campaign. Returns a reply."""
     kind, ident = parse_source(line)
+    db.kv_set("watcher_now", True)   # look at the new source right away, not at the next scheduled check
     if kind == "video":
         from . import watcher
         vid = watcher.add_video(ident, campaign_id)
@@ -301,6 +302,7 @@ def activate(cid):
     if not c:
         return None
     db.x("UPDATE campaigns SET stage='active', paused=0 WHERE id=?", cid)
+    db.kv_set("watcher_now", True)
     from . import watcher
     for v in _extra(c).get("videos") or []:
         try:

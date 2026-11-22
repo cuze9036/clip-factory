@@ -1,6 +1,7 @@
 """Runs every stage, lane by lane, so one campaign's backlog never blocks another."""
 import datetime as dt
 import json
+import random
 import time
 import traceback
 
@@ -84,7 +85,8 @@ def stage_metadata(c, limit=3):
 
 def run_once():
     cfg_w, cfg_s = config.section("watcher"), config.section("stats")
-    if _due("watcher_last_run", cfg_w.get("every_minutes", 15)):
+    if db.kv_get("watcher_now") or _due("watcher_last_run", cfg_w.get("every_minutes", 5) * random.uniform(0.8, 1.2)):
+        db.kv_set("watcher_now", None)   # set when a source is added or a campaign starts
         try:
             watcher.check_sources()
         except Exception as e:

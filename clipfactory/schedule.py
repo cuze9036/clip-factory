@@ -1,5 +1,6 @@
 """Pick US prime-time slots for approved clips, per campaign quota and per account caps."""
 import datetime as dt
+import random
 
 from . import campaigns, config, db
 from .util import ET, iso, parse_iso, utcnow
@@ -25,6 +26,7 @@ def next_slot(c, platform, account, not_before=None):
     cap = cfg.get("max_posts_per_account_per_day", 5)
     gap = dt.timedelta(minutes=cfg.get("min_gap_minutes", 120))
     offset = dt.timedelta(minutes=(cfg.get("platform_offset_min") or {}).get(platform, 0))
+    jitter = cfg.get("slot_jitter_min", 12)   # posts land a few minutes around each slot, like a person posting
     earliest = max(utcnow() + dt.timedelta(minutes=15), not_before or utcnow())
     taken = _taken(platform, account)
     quota_days = _campaign_clip_days(c["id"])
@@ -34,7 +36,8 @@ def next_slot(c, platform, account, not_before=None):
             same_day = [t for t in taken if t.astimezone(ET).date() == day]
             for hhmm in cfg.get("slots", ["12:30"]):
                 h, m = map(int, hhmm.split(":"))
-                when = dt.datetime.combine(day, dt.time(h, m), tzinfo=ET) + offset
+                when = dt.datetime.combine(day, dt.time(h, m), tzinfo=ET) + offset + dt.timedelta(
+                    seconds=random.uniform(-jitter, jitter) * 60)
                 if when < earliest or len(same_day) >= cap:
                     continue
                 if any(abs(when - t) < gap for t in taken):

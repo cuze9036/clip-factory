@@ -9,7 +9,7 @@ from . import config, db
 from .util import ET, iso, parse_iso, utcnow
 
 JSON_FIELDS = ("platforms", "accounts", "required_hashtags", "rules")
-POSTABLE = ("youtube", "instagram", "facebook", "tiktok")
+POSTABLE = ("youtube", "instagram", "facebook", "tiktok", "x")
 LAYOUTS = ("framed", "blur", "facecam_split", "crop")
 FIELDS = ("name", "platform", "creator", "url", "topic", "audience", "rate_per_1k", "budget_left",
           "max_payout_per_clip", "min_views", "ends", "daily_clip_quota", "platforms", "accounts",
@@ -389,7 +389,8 @@ def _extract_validate(d):
         raise llm.Invalid("no campaign name")
     plats = [str(p).lower().strip() for p in d.get("platforms") or []]
     plats = ["youtube" if p in ("youtube shorts", "shorts", "yt") else
-             "instagram" if p in ("instagram reels", "reels", "ig") else p for p in plats]
+             "instagram" if p in ("instagram reels", "reels", "ig") else
+             "x" if p in ("twitter", "x (twitter)", "x/twitter", "twitter/x") else p for p in plats]
     d["unsupported_platforms"] = [p for p in plats if p not in POSTABLE]
     d["platforms"] = [p for p in plats if p in POSTABLE]
     if not isinstance(d.get("sources") or [], list) or not isinstance(d.get("rules") or [], list):

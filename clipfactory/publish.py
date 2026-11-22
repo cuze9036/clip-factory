@@ -140,7 +140,19 @@ def _check(r):
     return r.json()
 
 
-def _caption(clip):
+NAMES = {"youtube": "YouTube", "instagram": "Instagram", "facebook": "Facebook", "tiktok": "TikTok", "x": "X"}
+
+
+def name(platform):
+    return NAMES.get(platform, platform.title())
+
+
+def _caption(clip, platform=None):
+    if platform == "x":   # X posts allow 280 characters: title, credit line and hashtags only
+        tags = " ".join(json.loads(clip["hashtags"] or "[]"))
+        credit = next((ln for ln in (clip["description"] or "").splitlines() if ln.lower().startswith("credit")), "")
+        text = "\n\n".join(p for p in (clip["title"], credit, tags) if p)
+        return text if len(text) <= 280 else text[:277].rsplit(" ", 1)[0] + "..."
     return f"{clip['title']}\n\n{clip['description']}"[:2200]
 
 
@@ -220,14 +232,14 @@ def hand_off(post, clip):
     safe = re.sub(r'[<>:"/\\|?*]+', "", clip["title"] or "clip")[:50].strip()
     base = ready_folder(post["platform"]) / f"#{post['id']} {safe}"
     shutil.copyfile(clip["final_path"], f"{base}.mp4")
-    caption = _caption(clip)
+    caption = _caption(clip, post["platform"])
     with open(f"{base}.txt", "w", encoding="utf-8") as f:
         f.write(caption)
     db.x("UPDATE posts SET status='manual', error=NULL WHERE id=?", post["id"])
     camp = db.one("SELECT name, url FROM campaigns WHERE id=?", post["campaign_id"])
     from . import telegram
     on_phone = "The video and caption are on Telegram. " if telegram.creds() else ""
-    notify.send("manual", f"Time to post on {post['platform'].title()} (post {post['id']}) · {camp['name']}\n"
+    notify.send("manual", f"Time to post on {name(post['platform'])} (post {post['id']}) · {camp['name']}\n"
                 f"{on_phone}Video also in: Clipping Tools\\Ready to post\\{post['platform']}\\#{post['id']} {safe}.mp4\n"
                 f"Caption:\n```\n{caption[:1200]}\n```\n"
                 f"After posting, type `!posted {post['id']} <link to your post>`",

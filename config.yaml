@@ -71,7 +71,7 @@ llm:
 
 schedule:
   slots: ["09:00", "12:30", "16:00", "19:00", "21:30"]   # US Eastern
-  platform_offset_min: {youtube: 0, instagram: 90, facebook: 120}
+  platform_offset_min: {youtube: 0, tiktok: 60, instagram: 90, facebook: 120, x: 150}
   max_posts_per_account_per_day: 5
   min_gap_minutes: 120
   youtube_uploads_per_day: 6      # default API quota allows about 6
@@ -127,7 +127,7 @@ accounts:
 # Telegram, and you mark it live on Discord with !posted.
 # A platform with its keys set in .env posts automatically instead.
 # Add tiktok only if you can use TikTok where you are (it is blocked in India).
-manual_platforms: [instagram, facebook]
+manual_platforms: [instagram, facebook, tiktok, x]
 
 graph_api_version: v21.0
 

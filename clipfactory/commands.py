@@ -96,7 +96,7 @@ def _where(c):
     for p in c["platforms"]:
         m = publish.mode(p, c["accounts"].get(p, "main"))
         if m:
-            parts.append((m != "auto", f"{p.title().replace('Youtube', 'YouTube')} ({'auto' if m == 'auto' else 'you post'})"))
+            parts.append((m != "auto", f"{publish.name(p)} ({'auto' if m == 'auto' else 'you post'})"))
     return " + ".join(t for _, t in sorted(parts)) or "no platform you can use yet"
 
 

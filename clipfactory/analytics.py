@@ -60,7 +60,7 @@ def refresh():
         except Exception as e:
             db.log(None, f"YouTube stats failed: {e}", "warn")
     for p in posts:
-        if p["platform"] == "youtube":
+        if p["platform"] not in ("instagram", "facebook"):   # TikTok and X views aren't read yet
             continue
         try:
             acc = publish._account(p["platform"], p["account"])

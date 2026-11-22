@@ -51,7 +51,7 @@ def hand_off(post, clip, caption, campaign_name):
     """The video, then the caption on its own so it's easy to copy. Returns False when Telegram isn't set up."""
     if not creds():
         return False
-    platform = post["platform"].title()
-    send_video(clip["final_path"], f"{platform} reel · post {post['id']} · {campaign_name}")
+    from .publish import name
+    send_video(clip["final_path"], f"{name(post['platform'])} · post {post['id']} · {campaign_name}")
     send_text(caption)
     return True

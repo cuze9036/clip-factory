@@ -77,7 +77,8 @@ def summary(c):
 
 
 PLATFORM_MAP = {"youtube": "youtube", "youtube_shorts": "youtube", "shorts": "youtube", "instagram": "instagram",
-                "instagram_reels": "instagram", "reels": "instagram", "facebook": "facebook", "facebook_reels": "facebook", "tiktok": "tiktok"}
+                "instagram_reels": "instagram", "reels": "instagram", "facebook": "facebook", "facebook_reels": "facebook", "tiktok": "tiktok",
+                "x": "x", "twitter": "x"}
 
 
 def from_listing(item):

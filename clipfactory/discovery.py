@@ -22,7 +22,12 @@ def fetch_listings():
     r = requests.post(f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items",
                       params={"token": token, "clean": "true", "limit": d.get("max_listings", 40)},
                       json=d.get("apify_input") or {}, timeout=300)
-    r.raise_for_status()
+    # Never use raise_for_status here: its message holds the URL, and the URL holds the token.
+    if r.status_code in (402, 403):
+        raise RuntimeError(f"Apify credit or usage limit reached (HTTP {r.status_code}). "
+                           "Check apify.com > Billing, or raise discovery every_hours in config.local.yaml")
+    if r.status_code >= 400:
+        raise RuntimeError(f"Apify returned HTTP {r.status_code}: {r.text[:200]}")
     items = r.json()
     return items if isinstance(items, list) else []
 

@@ -11,7 +11,8 @@ def _get(resource, **params):
     if not key:
         raise RuntimeError("YOUTUBE_API_KEY is not set in .env")
     r = requests.get(BASE + resource, params={**params, "key": key}, timeout=30)
-    r.raise_for_status()
+    if r.status_code >= 400:   # not raise_for_status: its message would show the key
+        raise RuntimeError(f"YouTube API {resource} returned HTTP {r.status_code}: {r.text[:200]}")
     return r.json()
 
 

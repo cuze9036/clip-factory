@@ -89,7 +89,8 @@ def _apify():
     if not token:
         raise _Skip("APIFY_TOKEN not set (campaign finder off)")
     r = requests.get("https://api.apify.com/v2/users/me", params={"token": token}, timeout=20)
-    r.raise_for_status()
+    if r.status_code >= 400:   # not raise_for_status: its message would show the token
+        raise RuntimeError(f"Apify returned HTTP {r.status_code}")
     return f"account {r.json()['data'].get('username', 'ok')}"
 
 

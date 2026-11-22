@@ -102,7 +102,7 @@ def run_once():
             db.log(None, f"{fn.__module__} error: {e}", "error")
     if _due("stats_last_run", cfg_s.get("every_hours", 6) * 60):
         analytics.refresh()
-    if _due("discovery_last_run", config.section("discovery").get("every_hours", 6) * 60):
+    if _due("discovery_last_run", config.section("discovery").get("every_hours", 1) * 60):
         discovery.run()
 
 

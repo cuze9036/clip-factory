@@ -85,7 +85,7 @@ review:
 
 discovery:                        # finds new clipping campaigns and suggests them on Discord
   enabled: true
-  every_hours: 6
+  every_hours: 1                  # new campaigns fill fast; check every hour (uses Apify credit)
   apify_actor: fayoussef~whop-clipping-campaigns-scraper   # reads Whop's public campaign listings
   apify_input: {}
   max_listings: 40

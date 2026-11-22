@@ -127,6 +127,9 @@ insights:                         # weekly self-review with the free AI (Gemini 
   enabled: true
   every_days: 7
   daily_check_hours: 24           # daily check of problems (errors, stuck work, missed posts, budgets)
+  autofix: true                   # fix safe problems by itself (retries, Telegram fallback, reminders)
+  autofix_every_minutes: 60
+  autofix_max_tries: 2            # each failed item is retried at most this many times
   min_posts: 5                    # posts with views needed before it gives advice or changes anything
 
 gmail_watch:                      # reads Google's YouTube API audit emails (read-only) and posts them to Discord

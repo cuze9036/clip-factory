@@ -70,9 +70,12 @@ def report():
     posted = db.one("SELECT COUNT(*) n FROM posts WHERE status IN ('posted','uploaded') AND posted_at >= ?", _ago(24))["n"]
     made = db.one("SELECT COUNT(*) n FROM clips WHERE created_at >= ?", _ago(24))["n"]
     head = f"🩺 **Daily check** · {now:%b %d, %I:%M %p} ET · last 24 h: {made} clips made, {posted} posts out"
+    from . import autofix
+    fixed = autofix.recent_log(24)
+    tail = ("\n🛠️ **Fixed by itself (24 h)**\n" + "\n".join(f"• {t}" for t in fixed[-8:])) if fixed else ""
     if not found:
-        return head + "\n✅ Everything looks fine."
-    return head + "\n" + "\n".join(f"{icon} {what}\n    → {fix}" for icon, what, fix in found)
+        return head + "\n✅ Everything looks fine." + tail
+    return head + "\n" + "\n".join(f"{icon} {what}\n    → {fix}" for icon, what, fix in found) + tail
 
 
 def run():

@@ -1,4 +1,5 @@
 """LLM router: tries each configured provider in order, validates JSON, caches answers, enforces English."""
+import datetime as dt
 import hashlib
 import json
 import re
@@ -126,6 +127,39 @@ def _rate_limited(e):
     return "429" in s or "RESOURCE_EXHAUSTED" in s or "rate limit" in s.lower() or "quota" in s.lower()
 
 
+def _count(provider, task, ok):
+    """Today's answers and failures per AI provider and task, for !ai."""
+    key = "llm_usage:" + utcnow().date().isoformat()
+    u = db.kv_get(key) or {}
+    row = u.setdefault(provider, {"ok": 0, "fail": 0, "tasks": {}})
+    row["ok" if ok else "fail"] += 1
+    if ok:
+        row["tasks"][task] = row["tasks"].get(task, 0) + 1
+    db.kv_set(key, u)
+
+
+def usage(days=1):
+    """Plain-English usage of each AI over the last `days` days."""
+    total = {}
+    for i in range(days):
+        day = (utcnow() - dt.timedelta(days=i)).date().isoformat()
+        for name, r in (db.kv_get("llm_usage:" + day) or {}).items():
+            t = total.setdefault(name, {"ok": 0, "fail": 0, "tasks": {}})
+            t["ok"] += r["ok"]
+            t["fail"] += r["fail"]
+            for k, n in r["tasks"].items():
+                t["tasks"][k] = t["tasks"].get(k, 0) + n
+    if not total:
+        return "No AI answers yet in this period."
+    lines = [f"**AI use, last {days} day(s)**"]
+    for name, t in sorted(total.items(), key=lambda x: -x[1]["ok"]):
+        top = ", ".join(f"{k} {n}" for k, n in sorted(t["tasks"].items(), key=lambda x: -x[1])[:5])
+        lines.append(f"• **{name}**: {t['ok']} answers, {t['fail']} failed" + (f" · {top}" if top else ""))
+    order = config.section("llm").get("text_order") or []
+    lines.append("Text work tries " + " → ".join(order) + "; watching videos uses Gemini.")
+    return "\n".join(lines)
+
+
 def complete_json(task, prompt, validate, video=None):
     """Ask the first working provider; returns (data, provider_name)."""
     key = hashlib.sha256(json.dumps([task, prompt, video], sort_keys=True).encode()).hexdigest()
@@ -137,6 +171,9 @@ def complete_json(task, prompt, validate, video=None):
             pass
     errors = []
     tried = providers(video=bool(video))
+    order = config.section("llm").get("text_order") or []
+    if not video and order:   # text work: the free models first, Gemini as the fallback
+        tried.sort(key=lambda p: order.index(p["name"]) if p["name"] in order else len(order))
     if all(p.get("optional") for p in tried):
         errors.append("no LLM provider configured (set GEMINI_API_KEY or FREE_LLM_* in .env)")
     for p in tried:
@@ -146,11 +183,14 @@ def complete_json(task, prompt, validate, video=None):
                 data = validate(parse_json(text))
                 db.x("INSERT OR REPLACE INTO llm_cache(key, provider, response, created_at) VALUES(?,?,?,?)",
                      key, p["name"], json.dumps(data), iso(utcnow()))
+                _count(p["name"], task, True)
                 return data, p["name"]
             except (Invalid, json.JSONDecodeError, ValueError, KeyError, TypeError) as e:
                 errors.append(f"{p['name']}: invalid output ({e})")
+                _count(p["name"], task, False)
             except Exception as e:
                 errors.append(f"{p['name']}: {str(e)[:200]}")
+                _count(p["name"], task, False)
                 if _rate_limited(e):
                     _cooldown[p["name"]] = time.time() + 90
                 elif p.get("optional"):

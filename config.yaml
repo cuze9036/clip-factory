@@ -53,7 +53,10 @@ render:
   music_gain_db: -20
 
 llm:
-  # Tried in order. Providers with no key set are skipped.
+  # Watching videos: only providers with video: true (Gemini). Text work (titles, guides, campaign pages,
+  # reviews, error notes, moments from transcripts) tries text_order first, so the free models do most of it
+  # and Gemini's quota is kept for watching videos. Providers with no key set are skipped.
+  text_order: [free-llm, gemini, ollama]
   providers:
     - name: gemini
       type: gemini

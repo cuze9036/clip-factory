@@ -11,7 +11,7 @@ HELP = """**Clip Factory commands**
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
-`!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
+`!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -41,6 +41,7 @@ SLASH = {
     "source": ("Tell a campaign where its content is", "campaign number or id, then the link or folder"),
     "add": ("Clip one video", "video link, then campaign id"),
     "find": ("Look for new campaigns now", None),
+    "ai": ("Which AI did the work today (free models vs Gemini)", None),
     "fix": ("Fix what it can right now (retries, Telegram fallback) and explain errors", None),
     "check": ("Daily check now: problems and what to do", None),
     "insights": ("This week's review: what works, what doesn't, what to change", None),
@@ -351,6 +352,9 @@ def handle(text):
                 joinflow.done_waiting()
                 return guide.add(cid, text)
             return guide.show(cid)
+        if cmd == "!ai":
+            from . import llm
+            return llm.usage(int(args[0]) if args and args[0].isdigit() else 1)
         if cmd == "!fix":
             from . import autofix
             done, notes = autofix.run()

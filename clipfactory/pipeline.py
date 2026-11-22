@@ -85,6 +85,10 @@ def stage_metadata(c, limit=3):
 
 def run_once():
     cfg_w, cfg_s = config.section("watcher"), config.section("stats")
+    soon = db.kv_get("watcher_soon")   # a retry that is due (e.g. a Dropbox download), before the next regular check
+    if soon and utcnow() >= parse_iso(soon):
+        db.kv_set("watcher_soon", None)
+        db.kv_set("watcher_now", True)
     if db.kv_get("watcher_now") or _due("watcher_last_run", cfg_w.get("every_minutes", 5) * random.uniform(0.8, 1.2)):
         db.kv_set("watcher_now", None)   # set when a source is added or a campaign starts
         try:
@@ -138,8 +142,17 @@ def run_once():
         discovery.run()
 
 
+def resume_interrupted():
+    """Work cut off by a restart (update, crash, laptop off) starts again right away instead of hanging."""
+    v = db.conn().execute("UPDATE videos SET status='new' WHERE status='analyzing'").rowcount
+    m = db.conn().execute("UPDATE moments SET status='found' WHERE status='downloading'").rowcount
+    if v or m:
+        db.log(None, f"Resumed work cut off by a restart: {v} video(s), {m} moment(s)")
+
+
 def run_forever(pause_s=30):
     db.log(None, "Clip Factory started")
+    resume_interrupted()
     while True:
         run_once()
         time.sleep(pause_s)

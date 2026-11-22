@@ -136,6 +136,18 @@ if (-not (Test-Path $StampFile)) {
 
 if (-not (Test-Path $Cf)) { Log "Not installed: run windows\install.ps1 first"; exit 1 }
 
+# ---------- downloads in progress ----------
+# The tool keeps data\busy.lock fresh while it downloads campaign footage. Updates wait until it's done,
+# so an update never cuts a download (a lock older than 10 minutes is treated as left over).
+$BusyFile = Join-Path $Root "data\busy.lock"
+$script:BusyNoted = $false
+function Busy {
+    if (-not (Test-Path $BusyFile)) { $script:BusyNoted = $false; return $false }
+    $fresh = ((Get-Date) - (Get-Item $BusyFile).LastWriteTime).TotalMinutes -lt 10
+    if ($fresh -and -not $script:BusyNoted) { Log "A download is running; updates wait until it's done"; $script:BusyNoted = $true }
+    return $fresh
+}
+
 # ---------- settings changes ----------
 # A new key (set-key.ps1, restart.ps1) or a changed config.local.yaml restarts the pipeline within about 10 seconds.
 $WatchFiles = @((Join-Path $Root ".env"), (Join-Path $Root "config.local.yaml"))
@@ -173,8 +185,10 @@ try {
                 $dash = Start-Dashboard
                 break
             }
-            try { Check-Update } catch { Log "Update check failed: $_" }
-            try { Check-GitHub } catch { Log "GitHub check failed: $_" }   # every 10 s; "nothing new" is free
+            if (-not (Busy)) {
+                try { Check-Update } catch { Log "Update check failed: $_" }
+                try { Check-GitHub } catch { Log "GitHub check failed: $_" }   # every 10 s; "nothing new" is free
+            }
         }
         Get-ChildItem $Logs -Filter "clipfactory-*.log" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-14) } |
             Remove-Item -ErrorAction SilentlyContinue

@@ -111,14 +111,20 @@ class DropboxGuideTest(unittest.TestCase):
         campaigns.activate(cid)
         s = campaigns.sources(cid)[0]
         with mock.patch.object(watcher, "dropbox_download", side_effect=OSError("connection reset")):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(RuntimeError) as e:
                 watcher._dropbox(campaigns.get(cid), s, 15)
+        self.assertIn("trying again in 2 min", str(e.exception))
+        self.assertTrue(db.kv_get("watcher_soon"))                 # the pipeline checks again in 2 minutes
         body = _zip({"show1.mp4": b"v" * 50})
-        later = watcher.utcnow() + dt.timedelta(minutes=16)
+        with mock.patch("requests.get", return_value=_Resp(body)) as g:   # 1 minute later: still waiting
+            watcher._dropbox(campaigns.get(cid), s, 15)
+        g.assert_not_called()
+        later = watcher.utcnow() + dt.timedelta(minutes=3)
         with mock.patch("requests.get", return_value=_Resp(body)), mock.patch.object(watcher, "utcnow", return_value=later):
             watcher._dropbox(campaigns.get(cid), s, 15)
         root = next((watcher.config.data_dir() / "dropbox").iterdir())
         self.assertTrue((root / ".complete").exists())
+        self.assertFalse((watcher.config.data_dir() / "busy.lock").exists())   # updates may run again
         self.assertTrue((root / "show1.mp4").exists())
         texts = [r["text"] for r in db.q("SELECT text FROM outbox")]
         self.assertTrue(any("1 new video(s) downloaded" in t for t in texts))

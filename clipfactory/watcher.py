@@ -96,7 +96,17 @@ def dropbox_download(url, root):
     root.mkdir(parents=True, exist_ok=True)
     limit = config.section("watcher").get("dropbox_max_gb", 20) * 1024 ** 3
     tmp = root / ".download.part"
-    with requests.get(dropbox_direct(url), stream=True, timeout=(20, 600), allow_redirects=True) as r:
+    busy = config.data_dir() / "busy.lock"   # the updater waits while this file is fresh
+    busy.write_text(iso(utcnow()))
+    try:
+        return _download(url, root, limit, tmp, busy)
+    finally:
+        busy.unlink(missing_ok=True)
+
+
+def _download(url, root, limit, tmp, busy):
+    # read timeout 60 s: a stalled download fails fast and is retried in 2 minutes
+    with requests.get(dropbox_direct(url), stream=True, timeout=(20, 60), allow_redirects=True) as r:
         if r.status_code != 200:
             raise RuntimeError(f"Dropbox answered HTTP {r.status_code}; is the link still shared?")
         ctype = r.headers.get("content-type", "")
@@ -107,7 +117,9 @@ def dropbox_download(url, root):
         name = requests.utils.unquote(name.group(1)) if name else "download"
         size = 0
         with open(tmp, "wb") as f:
-            for chunk in r.iter_content(1024 * 1024):
+            for n, chunk in enumerate(r.iter_content(1024 * 1024)):
+                if n % 200 == 0:
+                    busy.write_text(iso(utcnow()))   # still downloading
                 size += len(chunk)
                 if size > limit:
                     raise RuntimeError("Dropbox folder is bigger than watcher.dropbox_max_gb")
@@ -158,8 +170,10 @@ def _dropbox(c, s, min_dur):
             videos, refs = dropbox_download(s["channel_id"], root)
         except Exception as e:
             # Try again in 15 minutes (not 6 hours): a cut connection or a restart shouldn't stall the campaign.
-            db.kv_set(key + ":retry", iso(utcnow() + dt.timedelta(minutes=15)))
-            raise RuntimeError(f"Dropbox download failed, trying again in 15 min: {e}") from None
+            minutes = config.section("watcher").get("dropbox_retry_minutes", 2)
+            db.kv_set(key + ":retry", iso(utcnow() + dt.timedelta(minutes=minutes)))
+            db.kv_set("watcher_soon", iso(utcnow() + dt.timedelta(minutes=minutes)))
+            raise RuntimeError(f"Dropbox download failed, trying again in {minutes} min: {e}") from None
         (root / ".complete").write_text(iso(utcnow()))
         db.kv_set(key, iso(utcnow()))
         db.kv_set(key + ":retry", None)
@@ -168,6 +182,8 @@ def _dropbox(c, s, min_dur):
             notify.send("progress", f"✅ Dropbox for **{c['name']}**: {len(videos)} new video(s) downloaded. "
                         "The AI looks for moments next; clips come here for review.", campaign_id=c["id"])
         _reference_files(c, refs)
+    if not root.exists():
+        return 0   # nothing downloaded yet; the retry comes soon
     return _folder(c, {**s, "channel_id": str(root)}, min_dur)
 
 

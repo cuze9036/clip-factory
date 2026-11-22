@@ -8,6 +8,7 @@ watcher:
   min_duration_s: 120             # skip YouTube/Twitch videos shorter than this (already a short)
   min_file_duration_s: 15         # campaign footage (folders, Dropbox) can be short; skip only tiny files
   dropbox_every_hours: 6          # re-download a Dropbox share link this often to pick up new files
+  dropbox_retry_minutes: 2        # a failed or stalled download starts again this soon
   dropbox_max_gb: 20
 
 moments:

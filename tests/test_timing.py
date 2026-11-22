@@ -66,5 +66,15 @@ class TimingTest(unittest.TestCase):
         self.assertFalse(db.kv_get("watcher_now"))
 
 
+    def test_work_cut_off_by_a_restart_resumes(self):
+        from clipfactory import campaigns, db, pipeline
+        cid = campaigns.suggest({"name": "Band Live", "platforms": ["youtube"], "rate_per_1k": 2}, "pasted")
+        db.x("INSERT INTO videos(id, campaign_id, title, status) VALUES(?,?,?,?)", "v1", cid, "a", "analyzing")
+        db.x("INSERT INTO moments(video_id, campaign_id, status) VALUES(?,?,?)", "v1", cid, "downloading")
+        pipeline.resume_interrupted()
+        self.assertEqual(db.one("SELECT status FROM videos WHERE id='v1'")["status"], "new")
+        self.assertEqual(db.one("SELECT status FROM moments")["status"], "found")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,4 +12,4 @@ if (Test-Path $envFile) { $lines = @(Get-Content $envFile | Where-Object { $_ -n
 $lines += "$Name=$v"
 [IO.File]::WriteAllLines($envFile, [string[]]$lines, (New-Object System.Text.UTF8Encoding($false)))
 try { icacls "$envFile" /inheritance:r /grant:r "$($env:USERNAME):(F)" 2>$null | Out-Null } catch { }
-Write-Host "$Name saved. Restart Clip Factory to use it." -ForegroundColor Green
+Write-Host "$Name saved. Clip Factory restarts by itself in about 10 seconds to use it." -ForegroundColor Green

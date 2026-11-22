@@ -138,6 +138,19 @@ if (-not (Test-Path $StampFile)) {
 
 if (-not (Test-Path $Cf)) { Log "Not installed: run windows\install.ps1 first"; exit 1 }
 
+# ---------- settings changes ----------
+# A new key (set-key.ps1, restart.ps1) or a changed config.local.yaml restarts the pipeline within about 10 seconds.
+$WatchFiles = @((Join-Path $Root ".env"), (Join-Path $Root "config.local.yaml"))
+
+function Settings-Stamp {
+    return ($WatchFiles | ForEach-Object { if (Test-Path $_) { (Get-Item $_).LastWriteTimeUtc.Ticks } else { 0 } }) -join ","
+}
+
+function Stop-Tree($proc) {
+    # clipfactory.exe starts python.exe as a child, so stop the whole tree.
+    if ($proc -and -not $proc.HasExited) { taskkill /PID $proc.Id /T /F 2>&1 | Out-Null }
+}
+
 Log "Starting"
 $dash = Start-Dashboard
 try {
@@ -146,21 +159,32 @@ try {
         if ($dash.HasExited) { $dash = Start-Dashboard }
         $stamp = Get-Date -Format yyyy-MM-dd_HHmm
         Log "Pipeline starting"
+        $settings = Settings-Stamp
         $p = Start-Process -FilePath $Cf -ArgumentList "run" -WorkingDirectory $Root -WindowStyle Hidden `
             -RedirectStandardOutput (Join-Path $Logs "clipfactory-$stamp.log") `
             -RedirectStandardError (Join-Path $Logs "clipfactory-$stamp-errors.log") -PassThru
+        $changed = $false
         while (-not $p.HasExited) {
             Start-Sleep -Seconds 10
             if ($dash.HasExited) { $dash = Start-Dashboard }
+            if ((Settings-Stamp) -ne $settings) {
+                Log "Settings changed (.env or config.local.yaml); restarting the pipeline"
+                $changed = $true
+                Stop-Tree $p
+                Stop-Tree $dash
+                $dash = Start-Dashboard
+                break
+            }
             try { Check-Update } catch { Log "Update check failed: $_" }
             try { Check-GitHub } catch { Log "GitHub check failed: $_" }   # every 10 s; "nothing new" is free
         }
-        Log "Pipeline stopped (exit code $($p.ExitCode)); restarting in 30 seconds"
         Get-ChildItem $Logs -Filter "clipfactory-*.log" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-14) } |
             Remove-Item -ErrorAction SilentlyContinue
+        if ($changed) { continue }   # restart right away with the new settings
+        Log "Pipeline stopped (exit code $($p.ExitCode)); restarting in 30 seconds"
         Start-Sleep -Seconds 30
     }
 } finally {
-    if ($dash -and -not $dash.HasExited) { Stop-Process -Id $dash.Id -Force -ErrorAction SilentlyContinue }
+    Stop-Tree $dash
     $mutex.ReleaseMutex()
 }

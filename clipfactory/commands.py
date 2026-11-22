@@ -10,7 +10,7 @@ HELP = """**Clip Factory commands**
 `!todo` clips to post yourself and links to submit · `!posted <post> <link>` · `!submitted <post>`
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
-`!board` refresh the #campaigns board now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
+`!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
 `!add <video link> <campaign id>` clip one video
@@ -30,7 +30,7 @@ SLASH = {
     "posted": ("You posted a clip yourself", "post number and the link"),
     "submitted": ("You submitted a post on the campaign page", "post number"),
     "suggested": ("All campaigns the finder found", None),
-    "board": ("Refresh the #campaigns board now", None),
+    "board": ("Refresh #campaign-updates and #active-campaigns now", None),
     "activate": ("Start a campaign's lane", "campaign number or id"),
     "ignore": ("Hide a campaign", "campaign number or id"),
     "pause": ("Pause a lane", "campaign id"),
@@ -323,9 +323,9 @@ def handle(text):
             return f"Clip Factory version {version()}"
         if cmd == "!board":
             db.kv_set("board_dirty", True)
-            db.kv_set("board_last_full", None)
-            from . import board
-            return f"Refreshing #{board.channel_name()} (about a minute)."
+            for k in ("live", "running"):
+                db.kv_set(f"board_last_full:{k}", None)
+            return "Refreshing #campaign-updates and #active-campaigns (about a minute)."
         if cmd == "!emails":
             from . import gmail_watch
             return gmail_watch.emails_command()

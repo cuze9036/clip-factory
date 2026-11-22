@@ -1,9 +1,11 @@
-"""The #campaigns board: one Discord message per live campaign, kept up to date by the bot.
+"""Two campaign boards in your existing Discord channels, kept up to date by the bot (it never creates channels):
 
-- New campaigns appear, changed numbers are edited in place, ended / ignored / duplicate ones are deleted.
-- Duplicates (same campaign name) keep only the freshest one.
-- Every card has a priority tag: 🥇 FIRST, 🥈 SECOND or ⚪ LOW, from the pay numbers plus an AI judgement of how
-  quick and easy the clips are to make. Running lanes sit at the bottom with ▶ RUNNING.
+- #campaign-updates ("live"): one card per live campaign you could join, with a priority tag 🥇 FIRST, 🥈 SECOND or
+  ⚪ LOW (pay numbers plus an AI judgement of how quick and easy the clips are). Best ones at the bottom.
+- #active-campaigns ("running"): one card per campaign lane the tool is running, with its clips, views and earnings.
+
+New campaigns appear, changed numbers are edited in place, ended / ignored / duplicate ones are deleted.
+Duplicates (same campaign name) keep only the freshest one.
 
 This module only decides what the board should show (plan) and what to change (ops). discord_bot.py does the
 Discord calls.
@@ -18,6 +20,7 @@ from .util import ET, iso, parse_iso, utcnow
 TIERS = {"low": "⚪ LOW PRIORITY", "second": "🥈 SECOND PRIORITY", "first": "🥇 FIRST PRIORITY",
          "running": "▶ RUNNING"}
 ORDER = ["low", "second", "first", "running"]   # top to bottom: the best ones end up next to the message box
+BOARDS = ("live", "running")
 EFFORT_ICON = {"easy": "🟢 easy", "medium": "🟡 medium", "hard": "🔴 hard"}
 
 EFFORT_PROMPT = """A clipping campaign pays clippers per 1,000 views of short vertical clips they post.
@@ -138,48 +141,65 @@ def card(c, t, eff):
     return "\n".join(lines)[:1900]
 
 
+def _running():
+    """Lanes the tool is running. Template lanes from campaigns.yaml count once they have videos."""
+    out = []
+    for c in campaigns.all_campaigns():
+        if campaigns.lane_state(c) != "running":
+            continue
+        if c.get("origin") == "yaml" and not db.one("SELECT 1 FROM videos WHERE campaign_id=?", c["id"]):
+            continue
+        out.append(c)
+    return out
+
+
 def plan(max_ai=5):
-    """Ordered list of {key, text, buttons, tier} for the board, top to bottom, ending with the summary."""
+    """{'live': [...], 'running': [...]}: each an ordered list of {key, text, buttons, tier}, top to bottom,
+    ending with that board's summary."""
     from . import joinflow
     asked = 0
-    items = []
-    running = [c for c in campaigns.all_campaigns() if campaigns.lane_state(c) == "running"
-               and c.get("origin") != "yaml"]
-    for c in running:
-        items.append(({"key": f"c:{c['id']}", "tier": "running", "sort": -(c["rate_per_1k"] or 0)},
-                      c, effort(c, allow_ai=False)))
+    live = []
     for c in _dedupe(joinflow.live_campaigns()):
         need_ai = not campaigns._extra(c).get("effort")
         eff = effort(c, allow_ai=need_ai and asked < max_ai)
         if need_ai and asked < max_ai:
             asked += 1   # a few AI looks per refresh; the rest get theirs on the next refresh
-        t = tier(c, eff)
-        items.append(({"key": f"c:{c['id']}", "tier": t, "sort": -score(c, eff)}, c, eff))
-    items.sort(key=lambda x: (ORDER.index(x[0]["tier"]), -x[0]["sort"]))   # worst first, best last
-    out = []
-    for meta, c, eff in items:
-        buttons = [] if meta["tier"] == "running" else joinflow.buttons(c)
-        out.append({"key": meta["key"], "tier": meta["tier"], "text": card(c, meta["tier"], eff), "buttons": buttons})
-    counts = {t: sum(1 for i in out if i["tier"] == t) for t in ORDER}
+        live.append((tier(c, eff), score(c, eff), c, eff))
+    live.sort(key=lambda x: (ORDER.index(x[0]), x[1]))   # worst first, best last
     now = dt.datetime.now(ET)
-    summary = (f"**Campaign board** · updated {now:%b %d, %I:%M %p} ET\n"
-               f"🥇 {counts['first']} first · 🥈 {counts['second']} second · ⚪ {counts['low']} low · "
-               f"▶ {counts['running']} running\n"
-               "Priority = pay per 1K + budget left per clipper + how easy the clips are (AI) + whether you can "
-               "post there. Tap **Open campaign**, join on Whop, then **I joined** and paste the page.")
-    out.append({"key": "summary", "tier": "summary", "text": summary, "buttons": []})
-    return out
+    items = [{"key": f"live:c:{c['id']}", "tier": t, "text": card(c, t, eff), "buttons": joinflow.buttons(c)}
+             for t, _, c, eff in live]
+    counts = {t: sum(1 for i in items if i["tier"] == t) for t in ORDER}
+    items.append({"key": "live:summary", "tier": "summary", "buttons": [], "text": (
+        f"**Campaign updates** · {now:%b %d, %I:%M %p} ET\n"
+        f"🥇 {counts['first']} first · 🥈 {counts['second']} second · ⚪ {counts['low']} low\n"
+        "Priority = pay per 1K + budget left per clipper + how easy the clips are (AI) + whether you can post there.\n"
+        "Tap **Open campaign**, join on Whop, then **I joined** and paste the campaign page.")})
+
+    running = []
+    total_views = total_usd = 0
+    for c in sorted(_running(), key=lambda c: -(c["rate_per_1k"] or 0)):
+        st = campaigns.lane_stats(c)
+        total_views += st["views"]
+        total_usd += st["earned"]
+        running.append({"key": f"running:c:{c['id']}", "tier": "running", "buttons": [],
+                        "text": card(c, "running", effort(c, allow_ai=False))})
+    running.append({"key": "running:summary", "tier": "summary", "buttons": [], "text": (
+        f"**Active campaigns** · {now:%b %d, %I:%M %p} ET\n"
+        f"▶ {len(running)} running · {total_views:,} views · ~${total_usd:,.2f} earned"
+        + ("" if len(running) else "\nNothing running yet. Join one from #campaign-updates."))})
+    return {"live": items, "running": running}
 
 
 # ---------- what to change on Discord ----------
 
 def digest(item):
-    text = item["text"] if item["key"] != "summary" else item["text"].split("\n", 1)[1]  # ignore the clock
+    text = item["text"] if not item["key"].endswith("summary") else item["text"].split("\n", 1)[1]  # ignore the clock
     return hashlib.sha1(json.dumps([text, item["buttons"]]).encode()).hexdigest()
 
 
-def current():
-    return db.q("SELECT * FROM board ORDER BY pos")
+def current(kind):
+    return db.q("SELECT * FROM board WHERE key LIKE ? ORDER BY pos", kind + ":%")
 
 
 def ops(desired, now_rows):
@@ -195,15 +215,38 @@ def ops(desired, now_rows):
     return "edit", [d["key"] for d in desired if by_key[d["key"]]["hash"] != digest(d)]
 
 
-def due(minutes=15):
+def due(kind, minutes=15):
     """The summary's clock is refreshed at least this often even when nothing else changed."""
-    last = db.kv_get("board_last_full")
+    last = db.kv_get(f"board_last_full:{kind}")
     return not last or utcnow() - parse_iso(last) >= dt.timedelta(minutes=minutes)
 
 
-def mark_full():
-    db.kv_set("board_last_full", iso(utcnow()))
+def mark_full(kind):
+    db.kv_set(f"board_last_full:{kind}", iso(utcnow()))
 
 
-def channel_name():
-    return (config.section("discord").get("board_channel") or "campaigns").lstrip("#")
+def _norm(name):
+    return "".join(ch for ch in (name or "").lower() if ch.isalnum())
+
+
+def channel_names():
+    d = config.section("discord")
+    return {"live": (d.get("updates_channel") or "campaign-updates").lstrip("#"),
+            "running": (d.get("active_channel") or "active-campaigns").lstrip("#")}
+
+
+def match_channel(names, wanted):
+    """The existing channel whose name matches `wanted`, ignoring emoji, dashes and case
+    ("📢・campaign-updates" matches "campaign-updates"). Exact match first, then 'contains'."""
+    w = _norm(wanted)
+    for n in names:
+        if _norm(n) == w:
+            return n
+    for n in names:
+        if w and w in _norm(n):
+            return n
+    singular = w.rstrip("s")
+    for n in names:
+        if singular and singular in _norm(n):
+            return n
+    return None

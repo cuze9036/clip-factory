@@ -4,12 +4,13 @@ Owner writes Hindi/Hinglish: reply in simple Hindi, commands in English. Everyth
 
 ## What it is
 Python tool in this folder that earns from Whop clipping campaigns (paid per 1K views) and runs the owner's GTA 6 channel. Each campaign is a lane (sources, rules, budget, quota).
-Flow: `discovery.py` (Apify listings → suggested campaigns) → `watcher.py` (YouTube/Twitch/folder) → `moments.py` (Gemini watches YouTube; else transcript + `llm.py` router) → `download.py` → `render.py` (1080x1920, captions) → `metadata.py` → `review.py` (score ≥ 9 auto-approves) → `schedule.py` (US Eastern slots) → `publish.py` (YouTube auto; Instagram + Facebook manual) → `analytics.py`.
+Flow: `discovery.py` (Apify listings every 6 h + #campaign-feed → suggested campaigns → `board.py` cards) → `watcher.py` (YouTube/Twitch/folder) → `moments.py` (Gemini watches YouTube; else transcript + `llm.py` router) → `download.py` → `render.py` (1080x1920, captions) → `metadata.py` → `review.py` (score ≥ 9 auto-approves) → `schedule.py` (US Eastern slots) → `publish.py` (API where keys exist; else video + caption to Telegram/Discord for the owner to post) → `analytics.py`.
 
 ## Where things happen (keep it this way)
 - Discord (`discord_bot.py`, `commands.py`): all control, alerts, buttons, commands.
 - Telegram (`telegram.py`): only delivers Instagram/Facebook reels (video + caption). No commands.
-- Task "Clip Factory" runs `windows\start.ps1`: auto-start, crash restart, installs new GitHub commits (and zips dropped in `Desktop\CLIPING TOOL`) within about a minute.
+- Task "Clip Factory" runs `windows\start.ps1`: auto-start, crash restart, installs new GitHub commits (and zips dropped in `Desktop\CLIPING TOOL`) within about 30 seconds; restarts the pipeline within ~10 s when `.env` or `config.local.yaml` changes.
+- Discord channels: #general (control), #campaign-updates (live campaigns with priority tags, kept up to date), #active-campaigns (running lanes), #campaign-feed (followed announcement channels the bot reads).
 
 ## Rules
 - Never log in to or automate the owner's Whop account.
@@ -18,10 +19,12 @@ Flow: `discovery.py` (Apify listings → suggested campaigns) → `watcher.py` (
 - After code changes: bump `VERSION`, run `python -m pyflakes clipfactory`.
 - Read logs with `-Tail 30`, never whole files.
 
-## State
-Set up: Discord, Telegram, Gemini, FreeLLMAPI (`auto:default`), YouTube (OAuth app In production since 2026-11-21, homepage + privacy policy on GitHub Pages `cuze9036.github.io/clip-factory`; uploads stay private until Google's YouTube API audit), Apify free plan (no campaign links).
-Selftest: 12/12 OK (2026-11-21, Gemini model `gemini-3.5-flash`).
-End-to-end clip test works (2026-11-21). Look: `framed` layout (white background, CAPS title above the video for the whole clip, 1-2 word captions below, credit line), 12-30 s clips, English-only speech. Focus: paid campaigns; the owner's GTA 6 lane moves to a separate YouTube account later.
-To do: first campaign (`!suggested` → join on Whop → `!source 1 <link>` → `!activate 1`); re-run `clipfactory auth-youtube main` once after publishing (Testing-mode tokens expire after 7 days); YouTube API audit form.
+## State (updated 2026-11-22)
+Working: Discord (slash commands, buttons), Telegram hand-off, Gemini + FreeLLMAPI, YouTube login, Apify finder, Gmail audit watcher (read-only), GPU (captions + NVENC), auto-update via GitHub. Selftest all OK except "Offline alert" (needs HEARTBEAT_URL).
+Join flow: #campaign-updates card → Open campaign → join on Whop (owner) → I joined → paste the page → lane starts, card moves to #active-campaigns.
+Posting: YouTube = owner posts via Telegram until Google's API audit passes (`always_manual: [youtube]`; audit submitted 2026-11-22). Instagram + Facebook = Meta Graph API once keys are set (IG_MAIN_USER_ID, IG_MAIN_TOKEN, FB_MAIN_PAGE_ID, FB_MAIN_PAGE_TOKEN), else Telegram. TikTok + X = Telegram, owner posts (X API uploader only if the owner buys credits: X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET). No screen/remote-desktop automation of any platform.
+Paid campaigns: #Sponsored (or the campaign's #<Brand>Ad) on the first line of every caption; YouTube paid-promotion flag.
+Keys go in with `windows\set-key.ps1 <NAME>` (hidden input), never in chat.
+Next: 1) Meta keys (Instagram + Facebook auto) 2) healthchecks.io offline alert (HEARTBEAT_URL) 3) optional X credits + keys 4) join the first campaign from #campaign-updates.
 
 Restart: `powershell -ExecutionPolicy Bypass -File "$([Environment]::GetFolderPath('Desktop'))\Clipping Tools\windows\restart.ps1"` (restarts the pipeline in ~10 s; never starts a second runner)

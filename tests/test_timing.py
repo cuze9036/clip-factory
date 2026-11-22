@@ -29,10 +29,26 @@ class TimingTest(unittest.TestCase):
         with mock.patch.object(schedule, "utcnow", return_value=start):
             for _ in range(20):
                 when = schedule.next_slot(c, "instagram", "main").astimezone(ET)
-                base = dt.datetime.combine(when.date(), dt.time(9, 0), tzinfo=ET) + dt.timedelta(minutes=90)
+                base = min((dt.datetime.combine(when.date(), dt.time(*map(int, hm.split(":"))), tzinfo=ET)
+                            for hm in ("12:00", "15:00", "18:30", "20:00", "21:30")), key=lambda b: abs(when - b))
                 self.assertLessEqual(abs((when - base).total_seconds()), 12 * 60)
                 seen.add((when.minute, when.second))
         self.assertGreater(len(seen), 5)                  # not the same minute every time
+
+    def test_manual_platforms_use_owner_friendly_slots(self):
+        from clipfactory import campaigns, schedule
+        from clipfactory.util import ET
+        cid = campaigns.suggest({"name": "Band Live", "platforms": ["tiktok"], "rate_per_1k": 2}, "pasted")
+        c = campaigns.get(cid)
+        start = dt.datetime(2030, 1, 7, 6, 0, tzinfo=ET).astimezone(dt.timezone.utc)
+        with mock.patch.object(schedule, "utcnow", return_value=start), \
+                mock.patch("clipfactory.publish.mode", side_effect=lambda p, a: "manual"):
+            when = schedule.next_slot(c, "tiktok", "main").astimezone(ET)
+        self.assertEqual((when.date(), when.hour), (dt.date(2030, 1, 7), 12))   # 12:30 ET ± jitter
+        with mock.patch.object(schedule, "utcnow", return_value=start), \
+                mock.patch("clipfactory.publish.mode", side_effect=lambda p, a: "auto"):
+            when = schedule.next_slot(c, "x", "main").astimezone(ET)
+        self.assertIn(when.hour, (8,))                                            # 08:30 ET ± jitter
 
     def test_new_source_is_checked_right_away(self):
         from clipfactory import campaigns, db, pipeline

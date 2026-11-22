@@ -25,7 +25,13 @@ def next_slot(c, platform, account, not_before=None):
     cfg = config.section("schedule")
     cap = cfg.get("max_posts_per_account_per_day", 5)
     gap = dt.timedelta(minutes=cfg.get("min_gap_minutes", 120))
-    offset = dt.timedelta(minutes=(cfg.get("platform_offset_min") or {}).get(platform, 0))
+    from . import publish
+    manual = publish.mode(platform, account) == "manual"
+    slots = ((cfg.get("manual_slots") or {}).get(platform) if manual else None) \
+        or (cfg.get("platform_slots") or {}).get(platform)
+    offset = dt.timedelta(0) if slots else \
+        dt.timedelta(minutes=(cfg.get("platform_offset_min") or {}).get(platform, 0))
+    slots = slots or cfg.get("slots", ["12:30"])
     jitter = cfg.get("slot_jitter_min", 12)   # posts land a few minutes around each slot, like a person posting
     earliest = max(utcnow() + dt.timedelta(minutes=15), not_before or utcnow())
     taken = _taken(platform, account)
@@ -34,7 +40,7 @@ def next_slot(c, platform, account, not_before=None):
     for _ in range(30):
         if quota_days.get(day, 0) < c["daily_clip_quota"] or not_before:
             same_day = [t for t in taken if t.astimezone(ET).date() == day]
-            for hhmm in cfg.get("slots", ["12:30"]):
+            for hhmm in slots:
                 h, m = map(int, hhmm.split(":"))
                 when = dt.datetime.combine(day, dt.time(h, m), tzinfo=ET) + offset + dt.timedelta(
                     seconds=random.uniform(-jitter, jitter) * 60)

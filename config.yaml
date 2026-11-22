@@ -73,8 +73,25 @@ llm:
       optional: true              # skip silently when Ollama is not running
 
 schedule:
-  slots: ["09:00", "12:30", "16:00", "19:00", "21:30"]   # US Eastern
-  platform_offset_min: {youtube: 0, tiktok: 60, instagram: 90, facebook: 120, x: 150}
+  # US Eastern times. From 2026 posting-time studies (Buffer, Sprout Social, Metricool): Reels, Shorts and TikTok
+  # peak in the evening (6-10 PM ET, which is also afternoon on the West Coast), Facebook during the day,
+  # X in the morning and around lunch.
+  platform_slots:                 # platforms the tool posts by itself
+    youtube:   ["12:00", "15:30", "18:00", "20:00", "22:00"]
+    instagram: ["12:00", "15:00", "18:30", "20:00", "21:30"]
+    facebook:  ["09:30", "12:30", "15:00", "18:00", "20:00"]
+    tiktok:    ["12:30", "17:00", "19:00", "20:30", "22:00"]
+    x:         ["08:30", "10:00", "12:30", "15:00", "17:30"]
+  # Platforms you post by hand: good US times when you're awake in India
+  # (in winter, ET 12:00-12:30 = 22:30-23:00 IST, ET 20:00-22:00 = 06:30-08:30 IST, ET 08:30-10:00 = 19:00-20:30 IST).
+  manual_slots:
+    youtube:   ["12:00", "20:30", "22:00"]
+    instagram: ["12:00", "20:00", "21:30"]
+    facebook:  ["09:30", "12:30", "20:00"]
+    tiktok:    ["12:30", "20:00", "21:30"]
+    x:         ["08:30", "10:00", "12:30"]
+  slots: ["09:00", "12:30", "16:00", "19:00", "21:30"]   # any other platform
+  platform_offset_min: {youtube: 0, tiktok: 60, instagram: 90, facebook: 120, x: 150}   # only with "slots"
   max_posts_per_account_per_day: 5
   min_gap_minutes: 120
   slot_jitter_min: 12             # each post goes out at a random time up to 12 min before/after its slot

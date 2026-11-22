@@ -180,5 +180,52 @@ class DropboxGuideTest(unittest.TestCase):
         self.assertIn("running again", commands.button(f"pause:{a}"))
 
 
+    def _doc_resp(self, text, url="https://docs.google.com/document/d/x/export?format=txt", ctype="text/plain; charset=utf-8"):
+        r = mock.Mock(status_code=200, text=text, url=url, headers={"content-type": ctype}, encoding="utf-8")
+        return r
+
+    def test_google_doc_link_is_read_into_the_guide(self):
+        from clipfactory import campaigns, commands, guide, llm
+        a, b = self._two_running()
+        commands.button(f"guide:{a}")
+        link = "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit?usp=sharing"
+        with mock.patch("requests.get", return_value=self._doc_resp("EDITING GUIDE: hook in 1 second, band name on screen")) as g, \
+                mock.patch.object(llm, "complete_json", return_value=GUIDE) as m:
+            out = commands.pasted(a, link)
+        self.assertTrue(g.call_args[0][0].endswith("/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/export?format=txt"))
+        self.assertIn("EDITING GUIDE: hook in 1 second", m.call_args[0][1])
+        self.assertIn("Guide for Band Live", out)
+        self.assertTrue(guide.get(campaigns.get(a))["do"])
+
+    def test_private_google_doc_gives_clear_steps(self):
+        from clipfactory import commands
+        a, _ = self._two_running()
+        commands.button(f"guide:{a}")
+        login = self._doc_resp("<html>", url="https://accounts.google.com/ServiceLogin?x", ctype="text/html")
+        with mock.patch("requests.get", return_value=login):
+            out = commands.pasted(a, "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit")
+        self.assertIn("Anyone with the link", out)
+        self.assertIn("Plain text (.txt)", out)
+
+    def test_slides_and_sheets_export_urls(self):
+        from clipfactory import guide
+        with mock.patch("requests.get", return_value=self._doc_resp("slide text")) as g:
+            guide.fetch_doc("https://docs.google.com/presentation/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit#slide=id.p")
+        self.assertTrue(g.call_args[0][0].endswith("/presentation/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/export/txt"))
+
+    def test_text_file_attachment_is_read(self):
+        import asyncio
+        from clipfactory import discord_bot
+
+        class Att:
+            filename, content_type, size = "message.txt", "text/plain; charset=utf-8", 12
+
+            async def read(self):
+                return b"long guide text"
+
+        msg = mock.Mock(content="", attachments=[Att()], embeds=[])
+        self.assertEqual(asyncio.run(discord_bot.full_text(msg)), "long guide text")
+
+
 if __name__ == "__main__":
     unittest.main()

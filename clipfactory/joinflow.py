@@ -165,6 +165,12 @@ def add_link(cid, line):
     """A link or folder for a campaign you joined: add it as footage and start the lane. Returns a reply."""
     c = campaigns.get(cid)
     line = line.strip().strip("<>")
+    if "docs.google.com/" in line:   # a guide in Google Docs, not footage
+        from . import guide
+        try:
+            return guide.add(cid, line)
+        except Exception as e:
+            return str(e)[:400]
     if "whop.com" in line:
         return (f"That's the campaign page on Whop. I can't log in there, so open it, press **Ctrl+A**, **Ctrl+C** "
                 f"and paste the text here. Or send the creator's YouTube/Twitch channel: `!source {cid} <link>`.")

@@ -47,7 +47,8 @@ async def full_text(message):
     """Message text plus any pasted .txt file (Discord turns long pastes into message.txt) and embeds."""
     parts = [message.content or ""]
     for a in message.attachments:
-        if (a.filename or "").lower().endswith(".txt") and a.size <= 200_000:
+        name, ctype = (a.filename or "").lower(), (a.content_type or "").lower()
+        if (name.endswith((".txt", ".md", ".csv")) or ctype.startswith("text/")) and a.size <= 1_000_000:
             parts.append((await a.read()).decode("utf-8", "replace"))
     for e in message.embeds:
         parts += [e.title or "", e.description or "", e.url or ""]
@@ -254,7 +255,13 @@ class Bot(discord.Client):
             cid = await asyncio.to_thread(joinflow.awaiting)
             kind = await asyncio.to_thread(joinflow.awaiting_kind)
             linkish = text.startswith(("http", "<http", "@")) or ":\\" in text
-            if not cid or len(text) < (20 if kind == "guide" else 80) and not linkish:
+            if not cid:
+                if len(text) >= 200 or message.attachments or "docs.google.com/" in text:
+                    await message.channel.send(   # don't guess which campaign a long paste is for
+                        "Which campaign is this for? Tap **📋 Guide** (or **🎬 Footage**) on its card in "
+                        "#active-campaigns, then send it again. It goes to that campaign only.")
+                return
+            if len(text) < (20 if kind == "guide" else 80) and not linkish:
                 return
             async with message.channel.typing():   # the page after "I joined", or a guide / footage after a card button
                 reply = await asyncio.to_thread(commands.pasted, cid, text)

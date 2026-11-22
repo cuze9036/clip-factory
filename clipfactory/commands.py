@@ -395,7 +395,7 @@ def pasted(cid, text):
         try:
             reply = guide.add(cid, text)
         except Exception as e:
-            return f"Couldn't read that guide: {str(e)[:200]}. Paste it again, or use `!guide {cid} <text>`."
+            return f"Couldn't read that guide for **{campaigns.get(cid)['name']}**: {str(e)[:400]}"
         joinflow.done_waiting()
         return reply
     if kind == "source":

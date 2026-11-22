@@ -1,8 +1,16 @@
 """Campaign guide: the creator's instructions (the campaign page, reference material, briefs) turned into short
 "do" and "avoid" lines. The AI follows them when it picks moments and writes titles and captions."""
 import json
+import re
+
+import requests
 
 from . import campaigns, db, llm
+
+DOC = re.compile(r"https?://docs\.google\.com/(document|presentation|spreadsheets)/d/([\w-]{20,})[^\s)>\]]*", re.I)
+NOT_SHARED = ("That Google Doc isn't open to anyone with the link, so I can't read it. Either ask the campaign to "
+              "set Share > General access > \"Anyone with the link\", or open it and use File > Download > "
+              "Plain text (.txt), then send that file here.")
 
 PROMPT = """Below are a clipping campaign's instructions or reference material for clippers.
 Turn them into short, clear instructions for an AI that picks moments from long videos and writes clip titles and
@@ -18,6 +26,37 @@ Return JSON only:
 Text:
 {text}
 """
+
+
+def fetch_doc(url):
+    """Text of a Google Doc / Slides / Sheet shared with "anyone with the link" (no login). Raises with a clear
+    message when it isn't shared that way."""
+    m = DOC.search(url)
+    if not m:
+        raise ValueError("not a Google Docs link")
+    kind, doc_id = m.group(1).lower(), m.group(2)
+    export = {"document": f"https://docs.google.com/document/d/{doc_id}/export?format=txt",
+              "presentation": f"https://docs.google.com/presentation/d/{doc_id}/export/txt",
+              "spreadsheets": f"https://docs.google.com/spreadsheets/d/{doc_id}/export?format=csv"}[kind]
+    try:
+        r = requests.get(export, timeout=30, allow_redirects=True)
+    except requests.RequestException as e:
+        raise RuntimeError(f"Couldn't reach Google Docs ({type(e).__name__})") from None
+    if r.status_code != 200 or "accounts.google.com" in r.url or "text/html" in r.headers.get("content-type", ""):
+        raise RuntimeError(NOT_SHARED)
+    r.encoding = r.encoding or "utf-8"
+    return r.text.lstrip("\ufeff").strip()
+
+
+def expand(text):
+    """The text with every Google Docs link in it replaced by the doc's own text. Returns (text, problems)."""
+    problems, docs = [], []
+    for m in list(DOC.finditer(text or ""))[:5]:
+        try:
+            docs.append(f"\n\n[Google Doc]\n{fetch_doc(m.group(0))[:20000]}")
+        except Exception as e:
+            problems.append(str(e))
+    return (text or "") + "".join(docs), problems
 
 
 def _validate(d):
@@ -49,7 +88,10 @@ def add(cid, text):
     c = campaigns.get(cid)
     if not c:
         return f"No campaign `{cid}`."
-    data, _ = llm.complete_json("campaign_guide", PROMPT.format(text=text[:20000]), _validate)
+    text, problems = expand(text)
+    if problems and len(DOC.sub("", text).strip()) < 40:   # it was only a doc link, and it couldn't be read
+        raise RuntimeError(problems[0])
+    data, _ = llm.complete_json("campaign_guide", PROMPT.format(text=text[:40000]), _validate)
     extra = campaigns._extra(c)
     g = get(c)
     for k, cap in (("do", 15), ("avoid", 10)):

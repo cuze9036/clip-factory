@@ -349,6 +349,11 @@ def fit(c):
     if not db.one("SELECT 1 FROM sources WHERE campaign_id=?", c["id"]) and not extra.get("videos"):
         reasons.append("no content links yet (they usually appear after you join): add them with "
                        f"`!source {c['id']} <link>`")
+    terms = " ".join([c.get("brief") or ""] + [str(r) for r in c.get("rules") or []])
+    if re.search(r"\b(india|indian)\b", terms, re.I) or \
+            re.search(r"\b(tier[ -]?1|us[ -]only|usa[ -]only|united states only|us viewers only)\b", terms, re.I):
+        reasons.append("⚠ views may only pay from certain countries (check the rules): "
+                       "post for a US audience, Indian views may not count")
     interests = [i.lower() for i in d.get("interests") or []]
     hay = f"{c['name']} {c['topic']} {c['creator']}".lower()
     if interests and not any(i in hay for i in interests):

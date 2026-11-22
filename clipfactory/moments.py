@@ -171,6 +171,9 @@ def analyze(v, c):
             db.log(c["id"], f"Skipped {v['title']}: not English ({lang})")
             return []
     picks = _shape(raw, c, v["duration_s"])
+    # Every clip must be unique: skip moments that overlap one already taken from this video in this lane.
+    taken = db.q("SELECT start_s, end_s FROM moments WHERE video_id=? AND campaign_id=?", v["id"], c["id"])
+    picks = [m for m in picks if not any(m["start"] < t["end_s"] and m["end"] > t["start_s"] for t in taken)]
     for m in picks:
         db.x("""INSERT INTO moments(video_id, campaign_id, start_s, end_s, score, category, hook, why, created_at)
                 VALUES(?,?,?,?,?,?,?,?,?)""", v["id"], c["id"], m["start"], m["end"], m["score"], m["category"],

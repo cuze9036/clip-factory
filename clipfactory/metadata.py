@@ -2,7 +2,7 @@
 import json
 import re
 
-from . import llm
+from . import config, llm
 
 
 def _validate(data):
@@ -29,8 +29,16 @@ def write(clip_text, moment, campaign):
     return finalize(meta, campaign)
 
 
+DISCLOSURE = re.compile(r"^#?((?i:sponsored|ad|paidpartnership)|\w+Ad)$")   # #Sponsored, #ad, #NikeAd
+
+
 def finalize(meta, campaign):
-    tags = list(dict.fromkeys(campaign["required_hashtags"] + meta["hashtags"]))[:6]
+    required = list(campaign["required_hashtags"])
+    # Paid campaigns (e.g. Whop Content Rewards) require a paid-promotion tag like #Sponsored or #<Brand>Ad.
+    tag = config.section("metadata").get("paid_disclosure", "#Sponsored")
+    if (campaign.get("rate_per_1k") or 0) > 0 and tag and not any(DISCLOSURE.match(str(h)) for h in required + meta["hashtags"]):
+        required.insert(0, tag)
+    tags = list(dict.fromkeys(required + meta["hashtags"]))[:6]
     parts = [meta["description"]]
     if campaign["credit"]:
         parts.append(campaign["credit"])

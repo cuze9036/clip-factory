@@ -81,6 +81,17 @@ class MetaSelftestTest(unittest.TestCase):
             self.assertIn("EAAsecret", headers["Authorization"])
         self.assertTrue(calls[1][2]["Authorization"].startswith("OAuth "))   # the upload host wants "OAuth"
 
+    def test_paste_slips_in_keys_are_cleaned(self):
+        from clipfactory import publish, selftest
+        os.environ.update({"IG_MAIN_USER_ID": "a17841453437546398", "IG_MAIN_TOKEN": "aEAAsecret ",
+                           "FB_MAIN_PAGE_ID": " a1447638601766865", "FB_MAIN_PAGE_TOKEN": "EAAsecret"})
+        self.assertEqual(publish.meta_keys("instagram"), ("17841453437546398", "EAAsecret"))
+        self.assertEqual(publish.meta_keys("facebook"), ("1447638601766865", "EAAsecret"))
+        with mock.patch("requests.get", return_value=_resp(200, {"username": "clipsacct"})) as g:
+            self.assertTrue(selftest._check("Instagram posting", selftest._meta("instagram")).startswith("OK"))
+        self.assertTrue(g.call_args[0][0].endswith("/17841453437546398"))
+        self.assertEqual(g.call_args[1]["headers"]["Authorization"], "Bearer EAAsecret")
+
     def test_network_error_message_has_no_token(self):
         import requests
         from clipfactory import publish

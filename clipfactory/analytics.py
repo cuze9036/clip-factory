@@ -1,8 +1,7 @@
 """Stage 8: views, likes and US viewer share for every posted clip."""
 import datetime as dt
 
-
-from . import config, db, publish, youtube_api
+from . import db, publish, youtube_api
 from .util import iso, utcnow
 
 
@@ -65,8 +64,7 @@ def refresh():
         if p["platform"] not in ("instagram", "facebook"):   # TikTok and X views aren't read yet
             continue
         try:
-            acc = publish._account(p["platform"], p["account"])
-            token = config.env(acc["token_env"])
+            token = publish.meta_keys(p["platform"], p["account"])[1]
             metrics = ["views", "plays"] if p["platform"] == "instagram" else [
                 "fb_reels_total_plays", "blue_reels_play_count", "total_video_views"]
             v = _graph_views(p, token, metrics)

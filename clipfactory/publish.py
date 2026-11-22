@@ -173,6 +173,17 @@ def _check(r):
     return r.json()
 
 
+def meta_keys(platform, account="main"):
+    """(id, token) for Instagram/Facebook from .env, cleaned of paste slips: Meta IDs are digits only, and Meta
+    tokens start with "EAA" (a stray character typed before the paste is dropped)."""
+    acc = _account(platform, account)
+    raw_id = config.env(acc["user_id_env"] if platform == "instagram" else acc["page_id_env"]) or ""
+    token = (config.env(acc["token_env"]) or "").strip().strip('"\'')
+    if "EAA" in token and not token.startswith("EAA"):
+        token = token[token.index("EAA"):]
+    return re.sub(r"\D", "", raw_id), token
+
+
 def _g(method, url, token, **kw):
     """A Graph API call with the token in a header (never in the URL), so no error message or log line shows it."""
     headers = {"Authorization": f"Bearer {token}", **(kw.pop("headers", None) or {})}
@@ -223,7 +234,7 @@ def _caption(clip, platform=None, campaign=None):
 
 def instagram_upload(post, clip):
     acc = _account("instagram", post["account"])
-    uid, token = config.env(acc["user_id_env"]), config.env(acc["token_env"])
+    uid, token = meta_keys("instagram", post["account"])
     if not uid or not token:
         raise RuntimeError(f"Set {acc['user_id_env']} and {acc['token_env']} in .env")
     created = _g("POST", _graph(f"{uid}/media"), token, data={
@@ -251,7 +262,7 @@ def instagram_upload(post, clip):
 
 def facebook_upload(post, clip):
     acc = _account("facebook", post["account"])
-    page, token = config.env(acc["page_id_env"]), config.env(acc["token_env"])
+    page, token = meta_keys("facebook", post["account"])
     if not page or not token:
         raise RuntimeError(f"Set {acc['page_id_env']} and {acc['token_env']} in .env")
     start = _g("POST", _graph(f"{page}/video_reels"), token, data={"upload_phase": "start"}, timeout=60)

@@ -173,7 +173,7 @@ def _meta(platform):
         from . import publish
         acc = publish._account(platform, "main")
         id_env = acc["user_id_env"] if platform == "instagram" else acc["page_id_env"]
-        oid, token = config.env(id_env), config.env(acc["token_env"])
+        oid, token = publish.meta_keys(platform, "main")
         if not oid or not token:
             mode = publish.mode(platform, "main")
             raise _Skip(f"{id_env} / {acc['token_env']} not set, so you post {platform.title()} clips yourself"

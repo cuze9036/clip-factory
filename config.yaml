@@ -117,6 +117,7 @@ discovery:                        # finds new clipping campaigns and suggests th
   interests: []                   # e.g. ["gta", "gaming", "stream", "podcast"]; empty = any topic
 
 discord:
+  insights_channel: ai-insights       # weekly AI review + daily check (made by the bot if missing)
   updates_channel: campaign-updates   # live campaigns you could join, with priority tags (kept up to date)
   active_channel: active-campaigns    # the campaigns the tool is running, with clips, views and earnings
   feed_channel: campaign-feed     # follow clipping communities' announcement channels into this channel;
@@ -125,6 +126,7 @@ discord:
 insights:                         # weekly self-review with the free AI (Gemini / Free LLM API)
   enabled: true
   every_days: 7
+  daily_check_hours: 24           # daily check of problems (errors, stuck work, missed posts, budgets)
   min_posts: 5                    # posts with views needed before it gives advice or changes anything
 
 gmail_watch:                      # reads Google's YouTube API audit emails (read-only) and posts them to Discord

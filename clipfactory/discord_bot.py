@@ -65,6 +65,7 @@ class Bot(discord.Client):
         self.owner_id = int(config.env("DISCORD_OWNER_ID"))
         self.feed_id = None
         self.board_ids = {}
+        self.insights_id = None   # #ai-insights: weekly review and daily check
 
     async def setup_hook(self):
         self.tree = discord.app_commands.CommandTree(self)
@@ -105,6 +106,7 @@ class Bot(discord.Client):
             except discord.HTTPException as e:
                 db.log(None, f"Slash commands not registered: {e}", "warn")
         await self.find_board(ch)
+        await self.find_insights(ch)
         name = (config.section("discord").get("feed_channel") or "").lstrip("#")
         feed = discord.utils.get(ch.guild.text_channels, name=name) if name and ch.guild else None
         if feed:
@@ -144,6 +146,26 @@ class Bot(discord.Client):
             db.kv_set("board_missing_noted", True)
             await ch.send(f"I couldn't find {' and '.join(missing)}, so that board is off. "
                           "Create the channel (or set its name in config.local.yaml) and restart.")
+
+    async def find_insights(self, ch):
+        """#ai-insights for the weekly review and the daily check; made once if it doesn't exist."""
+        from . import board
+        if not ch.guild:
+            return
+        name = (config.section("discord").get("insights_channel") or "ai-insights").lstrip("#")
+        found = board.match_channel([c.name for c in ch.guild.text_channels], name)
+        chan = discord.utils.get(ch.guild.text_channels, name=found) if found else None
+        if not chan:
+            try:
+                chan = await ch.guild.create_text_channel(
+                    name, category=ch.category, topic="Clip Factory's own review: what works, what doesn't, problems to fix")
+            except discord.HTTPException:
+                if not db.kv_get("insights_channel_noted"):
+                    db.kv_set("insights_channel_noted", True)
+                    await ch.send(f"Create a text channel named #{name} and I'll post the weekly review and the "
+                                  "daily check there (until then they come here).")
+                return
+        self.insights_id = chan.id
 
     async def board_loop(self):
         await self.wait_until_ready()
@@ -233,7 +255,10 @@ class Bot(discord.Client):
                         kwargs["file"] = discord.File(small)
                     if row["buttons"]:
                         kwargs["view"] = view_for(row["buttons"])
-                    msg = await ch.send(row["text"], **kwargs)
+                    target = ch
+                    if row["kind"] in ("insights", "health") and self.insights_id:
+                        target = self.get_channel(self.insights_id) or ch
+                    msg = await target.send(row["text"], **kwargs)
                     notify.mark_sent(row["id"], str(msg.id))
                 except Exception as e:
                     notify.mark_sent(row["id"], error=str(e)[:300])
@@ -241,7 +266,8 @@ class Bot(discord.Client):
             await asyncio.sleep(5)
 
     def _allowed(self, user_id, channel_id):
-        return user_id == self.owner_id and (channel_id == self.channel_id or channel_id in self.board_ids.values())
+        return user_id == self.owner_id and (channel_id in (self.channel_id, self.insights_id)
+                                             or channel_id in self.board_ids.values())
 
     async def on_message(self, message):
         if self.feed_id and message.channel.id == self.feed_id:

@@ -113,6 +113,12 @@ def run_once():
         except Exception as e:
             db.log(None, f"Gmail audit watcher failed: {str(e)[:200]}", "warn")
     ins = config.section("insights")
+    if ins.get("enabled", True) and _due("health_last_run", ins.get("daily_check_hours", 24) * 60):
+        try:
+            from . import health
+            health.run()
+        except Exception as e:
+            db.log(None, f"Daily check failed: {str(e)[:200]}", "warn")
     if ins.get("enabled", True):
         if not db.kv_get("insights_last_run"):
             db.kv_set("insights_last_run", iso(utcnow()))   # first week starts now

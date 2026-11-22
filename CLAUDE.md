@@ -10,7 +10,7 @@ Flow: `discovery.py` (Apify listings every 6 h + #campaign-feed → suggested ca
 - Discord (`discord_bot.py`, `commands.py`): all control, alerts, buttons, commands.
 - Telegram (`telegram.py`): only delivers clips the owner posts by hand (video + caption): YouTube until the audit, TikTok, X, and Instagram/Facebook if their API fails. No commands.
 - Task "Clip Factory" runs `windows\start.ps1`: auto-start, crash restart, installs new GitHub commits (and zips dropped in `Desktop\CLIPING TOOL`) within about 30 seconds; restarts the pipeline within ~10 s when `.env` or `config.local.yaml` changes.
-- Discord channels: #general (control), #campaign-updates (live campaigns with priority tags, kept up to date), #active-campaigns (running lanes), #campaign-feed (followed announcement channels the bot reads).
+- Discord channels: #general (control), #ai-insights (weekly AI review + daily check, `health.py`, `!check`), #campaign-updates (live campaigns with priority tags, kept up to date), #active-campaigns (running lanes), #campaign-feed (followed announcement channels the bot reads).
 
 ## Rules
 - Never log in to or automate the owner's Whop account.

@@ -16,10 +16,13 @@ def _validate(data):
     return {"titles": titles, "description": desc, "hashtags": tags}
 
 
-def write(clip_text, moment, campaign):
+def write(clip_text, moment, campaign, hint=""):
+    rules = llm.rules_block(campaign)
+    if hint:   # the owner's note from a re-edit
+        rules += f"\n\nThe owner's feedback on the earlier version (follow it): {hint}"
     prompt = llm.METADATA_PROMPT.format(category=moment["category"], hook=moment["hook"], why=moment["why"],
                                         transcript=(clip_text or "(no speech)")[:1200], topic=campaign["topic"],
-                                        audience=campaign["audience"], rules=llm.rules_block(campaign))
+                                        audience=campaign["audience"], rules=rules)
     try:
         meta, _ = llm.complete_json("metadata", prompt, _validate)
     except llm.LLMError:

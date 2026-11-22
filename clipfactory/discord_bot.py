@@ -287,7 +287,7 @@ class Bot(discord.Client):
                         "Which campaign is this for? Tap **📋 Guide** (or **🎬 Footage**) on its card in "
                         "#active-campaigns, then send it again. It goes to that campaign only.")
                 return
-            if len(text) < (20 if kind == "guide" else 80) and not linkish:
+            if len(text) < {"guide": 20, "reedit": 3}.get(kind, 80) and not linkish:
                 return
             async with message.channel.typing():   # the page after "I joined", or a guide / footage after a card button
                 reply = await asyncio.to_thread(commands.pasted, cid, text)

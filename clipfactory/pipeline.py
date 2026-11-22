@@ -72,7 +72,8 @@ def stage_metadata(c, limit=3):
     for clip in db.q("SELECT * FROM clips WHERE campaign_id=? AND status='rendered' ORDER BY id LIMIT ?", c["id"], limit):
         m = db.one("SELECT * FROM moments WHERE id=?", clip["moment_id"])
         text = " ".join(w["w"] for w in json.loads(clip["words"] or "[]"))
-        meta = metadata.write(text, m, c)
+        from . import reedit
+        meta = metadata.write(text, m, c, hint=reedit.consume_hint(m["id"]))
         titles, title, desc, tags = metadata.store_fields(meta)
         db.x("UPDATE clips SET titles=?, title=?, description=?, hashtags=?, status='pending_review' WHERE id=?",
              titles, title, desc, tags, clip["id"])

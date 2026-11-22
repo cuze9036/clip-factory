@@ -2,7 +2,7 @@
 import datetime as dt
 import re
 
-from . import campaigns, db, review, watcher
+from . import campaigns, db, notify, review, watcher
 from .util import ET, iso, parse_iso, utcnow
 
 HELP = """**Clip Factory commands**
@@ -12,7 +12,7 @@ HELP = """**Clip Factory commands**
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
-`!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
+`!reedit <clip> [what to change]` make a clip again your way · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -43,6 +43,7 @@ SLASH = {
     "add": ("Clip one video", "video link, then campaign id"),
     "find": ("Look for new campaigns now", None),
     "ai": ("Which AI did the work today (free models vs Gemini)", None),
+    "reedit": ("Make a clip again your way", "clip number, then what to change (optional)"),
     "fix": ("Fix what it can right now (retries, Telegram fallback) and explain errors", None),
     "check": ("Daily check now: problems and what to do", None),
     "insights": ("This week's review: what works, what doesn't, what to change", None),
@@ -386,6 +387,17 @@ def handle(text):
                 joinflow.done_waiting()
                 return guide.add(cid, text)
             return guide.show(cid)
+        if cmd == "!reedit":
+            from . import reedit
+            clip_id = int(args[0])
+            note = rest.partition(" ")[2].strip()
+            if note:
+                return reedit.apply_text(clip_id, note)
+            text, btns = reedit.start(clip_id)
+            if btns:
+                notify.send("review", text, clip_id=clip_id, buttons=btns)
+                return "What should change? Tap below, or type it."
+            return text
         if cmd == "!ai":
             from . import llm
             return llm.usage(int(args[0]) if args and args[0].isdigit() else 1)
@@ -445,6 +457,9 @@ def pasted(cid, text):
     (after the 📋 Guide / 🎬 Footage buttons). The reply always names the campaign."""
     from . import guide, joinflow
     kind = joinflow.awaiting_kind() or "brief"
+    if kind == "reedit":
+        from . import reedit
+        return reedit.apply_text(db.kv_get("reedit_clip"), text)
     if kind == "guide":
         try:
             reply = guide.add(cid, text)
@@ -523,6 +538,17 @@ def _button(custom_id):
         return f"Skipped post {rest}."
     if kind == "act":
         return activate(rest)
+    if kind == "re":
+        from . import reedit
+        text, btns = reedit.start(int(rest))
+        if btns:
+            notify.send("review", text, clip_id=int(rest), buttons=btns)
+            return "What should change? Tap below, or type it."
+        return text
+    if kind == "ed":
+        from . import reedit
+        clip_id, op = rest.split(":")
+        return reedit.apply(int(clip_id), op)
     if kind in ("guide", "src", "pause"):
         return card_button(kind, rest)
     if kind == "join":

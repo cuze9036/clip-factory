@@ -39,7 +39,7 @@ def notify(clip_id):
                 + f"\nType `!approve {clip_id} 2` to pick title 2, or tap a button.",
                 campaign_id=clip["campaign_id"], clip_id=clip_id, file_path=clip["final_path"],
                 buttons=[[f"Post title {i + 1}", f"a:{clip_id}:{i}", "green"] for i in range(len(titles))]
-                + [["Reject", f"r:{clip_id}", "red"]])
+                + [["🔁 Re-edit", f"re:{clip_id}", "grey"], ["Reject", f"r:{clip_id}", "red"]])
 
 
 def auto_approve(clip_id):
@@ -49,7 +49,7 @@ def auto_approve(clip_id):
         outbox.send("auto", f"Auto-posting clip #{clip_id} ({clip['score']:.0f}/10) · {clip['campaign']}\n"
                     f"{clip['title']}\nGoes live {when.astimezone(ET):%a %b %d, %I:%M %p} ET. Tap Cancel to stop it.",
                     campaign_id=clip["campaign_id"], clip_id=clip_id, file_path=clip["final_path"],
-                    buttons=[["Cancel", f"x:{clip_id}", "red"]])
+                    buttons=[["🔁 Re-edit", f"re:{clip_id}", "grey"], ["Cancel", f"x:{clip_id}", "red"]])
     return when
 
 

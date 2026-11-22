@@ -2,5 +2,6 @@
 
 & (Join-Path $PSScriptRoot "stop.ps1")
 Unregister-ScheduledTask -TaskName "Clip Factory" -Confirm:$false -ErrorAction SilentlyContinue
+Unregister-ScheduledTask -TaskName "Clip Factory offline notice" -Confirm:$false -ErrorAction SilentlyContinue
 Write-Host "Auto-start removed. Delete the 'Clipping Tools' folder on your Desktop if you want everything gone." -ForegroundColor Yellow
 Read-Host -Prompt "Press Enter to close"

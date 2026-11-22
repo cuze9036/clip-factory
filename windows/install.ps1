@@ -222,6 +222,21 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($atLogon, 
     -Principal $principal -Description "Runs Clip Factory: finds campaigns, makes clips, posts them." -Force | Out-Null
 Ok "Task '$TaskName' added to Task Scheduler"
 
+# Tells the offline-alert service the moment Windows shuts down, restarts or sleeps. Optional: never stops the install.
+try {
+    $pingAction = New-ScheduledTaskAction -Execute "powershell.exe" `
+        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $Target "windows\offline-ping.ps1")`"" -WorkingDirectory $Target
+    $onOff = $cls | New-CimInstance -ClientOnly
+    $onOff.Enabled = $true
+    $onOff.Subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''User32''] and EventID=1074]]</Select><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Kernel-Power''] and EventID=42]]</Select></Query></QueryList>'
+    $pingSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
+    Register-ScheduledTask -TaskName "Clip Factory offline notice" -Action $pingAction -Trigger @($onOff) `
+        -Settings $pingSettings -Principal $principal -Force `
+        -Description "Tells Discord 'Bot is offline' when the laptop shuts down or sleeps." | Out-Null
+    Ok "Offline notice added (shutdown, restart, sleep)"
+} catch { Write-Host "    Offline notice not added: $($_.Exception.Message)" -ForegroundColor Yellow }
+
 if (-not $Update) {
     $sleep = Read-Host -Prompt "    Stop the laptop from sleeping while plugged in, so posts go out on time? (y/N)"
     if ($sleep -match '^[yY]') { powercfg /change standby-timeout-ac 0; Ok "Sleep on charger turned off" }

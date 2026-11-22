@@ -68,6 +68,7 @@ class Bot(discord.Client):
         for name, (about, box) in commands.SLASH.items():
             self.tree.add_command(self._slash(name, about, box))
         self.loop.create_task(self.drain_outbox())
+        self.loop.create_task(self.heartbeat())
 
     def _slash(self, name, about, box):
         """A real Discord slash command (shows up in the / menu) that runs the same as typing !name."""
@@ -92,7 +93,7 @@ class Bot(discord.Client):
     async def on_ready(self):
         db.log(None, f"Discord bot online as {self.user}")
         ch = self.get_channel(self.channel_id) or await self.fetch_channel(self.channel_id)
-        await ch.send(f"Clip Factory is running (version {commands.version()}). Type `/` or `!help` for commands.")
+        await ch.send(f"🟢 Clip Factory is running (version {commands.version()}). Type `/` or `!help` for commands.")
         if ch.guild:
             try:   # a server-only sync shows the / menu right away
                 self.tree.copy_global_to(guild=ch.guild)
@@ -118,6 +119,22 @@ class Bot(discord.Client):
             await asyncio.to_thread(joinflow.from_feed, text, message.id)
         except Exception as e:
             db.log(None, f"#campaign-feed message not read: {str(e)[:200]}", "warn")
+
+    async def heartbeat(self):
+        """Every 30 s, tell the offline-alert service (HEARTBEAT_URL, e.g. healthchecks.io) the bot is alive.
+        When the pings stop (laptop off, asleep, no internet, crash), that service posts "Bot is offline" on Discord
+        from the cloud, and "Bot is online" when they start again."""
+        await self.wait_until_ready()
+        url = config.env("HEARTBEAT_URL")
+        if not url:
+            return
+        import requests
+        while not self.is_closed():
+            try:
+                await asyncio.to_thread(requests.get, url, timeout=10)
+            except Exception:
+                pass   # no internet right now; the service will notice and alert
+            await asyncio.sleep(30)
 
     async def drain_outbox(self):
         await self.wait_until_ready()

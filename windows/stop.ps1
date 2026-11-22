@@ -1,6 +1,7 @@
 # Stops Clip Factory until the next login or network connection.
 # To turn auto-start off for good, run uninstall.ps1.
 
+& (Join-Path $PSScriptRoot "offline-ping.ps1")
 Stop-ScheduledTask -TaskName "Clip Factory" -ErrorAction SilentlyContinue
 $procs = Get-CimInstance Win32_Process | Where-Object {
     ($_.Name -in @("clipfactory.exe", "python.exe", "pythonw.exe") -and $_.CommandLine -match "clipfactory") -or

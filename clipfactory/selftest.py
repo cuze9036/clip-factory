@@ -154,6 +154,19 @@ def _gpu():
     return f"captions on {speech}, video encoding on {video}"
 
 
+def _heartbeat():
+    url = config.env("HEARTBEAT_URL")
+    if not url:
+        raise _Skip("HEARTBEAT_URL not set, so Discord won't hear when the laptop goes offline")
+    try:
+        r = requests.get(url, timeout=15)
+    except Exception as e:   # the URL is private, so show only the error type
+        raise RuntimeError(f"could not reach the alert service ({type(e).__name__})") from None
+    if r.status_code != 200:
+        raise RuntimeError(f"alert service answered HTTP {r.status_code}")
+    return "pinging; Discord hears 'Bot is offline' within about 2 minutes of the laptop stopping"
+
+
 def _gmail():
     from . import gmail_watch
     try:
@@ -168,7 +181,7 @@ CHECKS = [
     ("YouTube upload login", _youtube_login), ("Discord", _discord), ("Telegram", _telegram),
     ("Apify (campaign finder)", _apify), ("Reading YouTube videos", _download), ("Caption font", _font),
     ("Making a clip (first run downloads the speech model, about 500 MB)", _render),
-    ("GPU", _gpu), ("Gmail audit watcher", _gmail),
+    ("GPU", _gpu), ("Gmail audit watcher", _gmail), ("Offline alert", _heartbeat),
 ]
 
 

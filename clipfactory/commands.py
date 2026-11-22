@@ -1,8 +1,9 @@
 """What you can type in Discord, and what each button does. Plain functions so they're easy to test."""
+import datetime as dt
 import re
 
 from . import campaigns, db, review, watcher
-from .util import ET, iso, utcnow
+from .util import ET, iso, parse_iso, utcnow
 
 HELP = """**Clip Factory commands**
 `!status` every lane's numbers
@@ -66,6 +67,37 @@ def _clip_line(k):
     return f"#{k['id']} · {k['campaign']} · {k['score']:.0f}/10 · {k['title']}"
 
 
+def _progress(c):
+    """Where this lane's work is right now, step by step, and the last problem."""
+    cid = c["id"]
+    by = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) n FROM videos WHERE campaign_id=? GROUP BY status", cid)}
+    skipped = db.q("SELECT error, COUNT(*) n FROM videos WHERE campaign_id=? AND status='skipped' GROUP BY error", cid)
+    moments = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) n FROM moments WHERE campaign_id=? GROUP BY status", cid)}
+    clips = {r["status"]: r["n"] for r in db.q("SELECT status, COUNT(*) n FROM clips WHERE campaign_id=? GROUP BY status", cid)}
+    parts = [f"Footage: {sum(by.values())} video(s)"]
+    if by.get("waiting"):
+        parts.append(f"{by['waiting']} still downloading")
+    if by.get("new") or by.get("analyzing"):
+        parts.append(f"{by.get('new', 0) + by.get('analyzing', 0)} waiting for the AI")
+    if by.get("done"):
+        parts.append(f"{by['done']} analysed")
+    if skipped:
+        parts.append("skipped: " + ", ".join(f"{r['n']} {r['error'] or ''}".strip() for r in skipped))
+    if by.get("failed"):
+        parts.append(f"{by['failed']} failed")
+    parts.append(f"moments {sum(moments.values())}")
+    parts.append(f"clips being made {clips.get('downloaded', 0) + clips.get('rendered', 0)}")
+    if clips.get("failed"):
+        parts.append(f"{clips['failed']} clip(s) failed")
+    last = db.one("SELECT msg, at FROM events WHERE campaign_id=? AND level IN ('error','warn') ORDER BY id DESC LIMIT 1", cid)
+    out = " · ".join(parts)
+    if not sum(by.values()) and not campaigns.sources(cid):
+        out += " · no footage source yet: tap 🎬 Footage on its card"
+    if last and parse_iso(last["at"]) > utcnow() - dt.timedelta(hours=6):
+        out += f"\n    Last problem: {last['msg'][:200]}"
+    return out
+
+
 def status():
     lines, waiting = [], 0
     for c in campaigns.all_campaigns():
@@ -77,6 +109,8 @@ def status():
             continue
         lines.append(f"**{c['name']}** `{c['id']}` · {s['state']} · review {s['review']} · scheduled {s['scheduled']}"
                      f" · posted {s['posted']} · {s['views']:,} views · ~${s['earned']:,.2f}")
+        if s["state"] in ("running", "paused"):
+            lines.append("    " + _progress(c))
     out = "\n".join(lines) or "No lanes yet."
     if waiting:
         out += f"\n\n{waiting} found campaign(s) waiting for you. Type `!suggested` to see them."

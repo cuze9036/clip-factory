@@ -147,11 +147,26 @@ def _dropbox(c, s, min_dur):
     key = f"dropbox_last:{s['id']}"
     last = db.kv_get(key)
     every = dt.timedelta(hours=config.section("watcher").get("dropbox_every_hours", 6))
-    if not last or utcnow() - parse_iso(last) >= every or not root.exists():
+    retry_at = db.kv_get(key + ":retry")
+    complete = (root / ".complete").exists()   # written only after a whole download finished
+    due = not complete or not last or utcnow() - parse_iso(last) >= every
+    if due and not (retry_at and utcnow() < parse_iso(retry_at)):
+        from . import notify
+        if not complete:
+            notify.send("progress", f"⬇️ Downloading the Dropbox footage for **{c['name']}**…", campaign_id=c["id"])
+        try:
+            videos, refs = dropbox_download(s["channel_id"], root)
+        except Exception as e:
+            # Try again in 15 minutes (not 6 hours): a cut connection or a restart shouldn't stall the campaign.
+            db.kv_set(key + ":retry", iso(utcnow() + dt.timedelta(minutes=15)))
+            raise RuntimeError(f"Dropbox download failed, trying again in 15 min: {e}") from None
+        (root / ".complete").write_text(iso(utcnow()))
         db.kv_set(key, iso(utcnow()))
-        videos, refs = dropbox_download(s["channel_id"], root)
-        if videos or refs:
+        db.kv_set(key + ":retry", None)
+        if videos or refs or not complete:
             db.log(c["id"], f"Dropbox: {len(videos)} new video(s), {len(refs)} reference file(s)")
+            notify.send("progress", f"✅ Dropbox for **{c['name']}**: {len(videos)} new video(s) downloaded. "
+                        "The AI looks for moments next; clips come here for review.", campaign_id=c["id"])
         _reference_files(c, refs)
     return _folder(c, {**s, "channel_id": str(root)}, min_dur)
 

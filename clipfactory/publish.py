@@ -173,6 +173,16 @@ def _check(r):
     return r.json()
 
 
+def _g(method, url, token, **kw):
+    """A Graph API call with the token in a header (never in the URL), so no error message or log line shows it."""
+    headers = {"Authorization": f"Bearer {token}", **(kw.pop("headers", None) or {})}
+    try:
+        r = requests.request(method, url, headers=headers, **kw)
+    except requests.RequestException as e:
+        raise RuntimeError(f"Meta could not be reached ({type(e).__name__})") from None
+    return _check(r)
+
+
 NAMES = {"youtube": "YouTube", "instagram": "Instagram", "facebook": "Facebook", "tiktok": "TikTok", "x": "X"}
 
 
@@ -216,17 +226,17 @@ def instagram_upload(post, clip):
     uid, token = config.env(acc["user_id_env"]), config.env(acc["token_env"])
     if not uid or not token:
         raise RuntimeError(f"Set {acc['user_id_env']} and {acc['token_env']} in .env")
-    created = _check(requests.post(_graph(f"{uid}/media"), data={
-        "media_type": "REELS", "upload_type": "resumable", "caption": _caption(clip, "instagram", _campaign(post)), "share_to_feed": "true",
-        "access_token": token}, timeout=60))
+    created = _g("POST", _graph(f"{uid}/media"), token, data={
+        "media_type": "REELS", "upload_type": "resumable", "caption": _caption(clip, "instagram", _campaign(post)),
+        "share_to_feed": "true"}, timeout=60)
     cid = created["id"]
     size = os.path.getsize(clip["final_path"])
     ver = config.get().get("graph_api_version", "v21.0")
     with open(clip["final_path"], "rb") as f:
-        _check(requests.post(f"https://rupload.facebook.com/ig-api-upload/{ver}/{cid}", data=f, timeout=600,
-                             headers={"Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)}))
+        _g("POST", f"https://rupload.facebook.com/ig-api-upload/{ver}/{cid}", token, data=f, timeout=600,
+           headers={"Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)})
     for _ in range(60):
-        st = _check(requests.get(_graph(cid), params={"fields": "status_code", "access_token": token}, timeout=30))
+        st = _g("GET", _graph(cid), token, params={"fields": "status_code"}, timeout=30)
         if st.get("status_code") == "FINISHED":
             break
         if st.get("status_code") == "ERROR":
@@ -234,10 +244,8 @@ def instagram_upload(post, clip):
         time.sleep(10)
     else:
         raise RuntimeError("Instagram processing timed out")
-    media = _check(requests.post(_graph(f"{uid}/media_publish"),
-                                 data={"creation_id": cid, "access_token": token}, timeout=60))
-    link = _check(requests.get(_graph(media["id"]), params={"fields": "permalink", "access_token": token},
-                               timeout=30)).get("permalink")
+    media = _g("POST", _graph(f"{uid}/media_publish"), token, data={"creation_id": cid}, timeout=60)
+    link = _g("GET", _graph(media["id"]), token, params={"fields": "permalink"}, timeout=30).get("permalink")
     return media["id"], link
 
 
@@ -246,17 +254,16 @@ def facebook_upload(post, clip):
     page, token = config.env(acc["page_id_env"]), config.env(acc["token_env"])
     if not page or not token:
         raise RuntimeError(f"Set {acc['page_id_env']} and {acc['token_env']} in .env")
-    start = _check(requests.post(_graph(f"{page}/video_reels"),
-                                 data={"upload_phase": "start", "access_token": token}, timeout=60))
+    start = _g("POST", _graph(f"{page}/video_reels"), token, data={"upload_phase": "start"}, timeout=60)
     vid = start["video_id"]
     size = os.path.getsize(clip["final_path"])
     ver = config.get().get("graph_api_version", "v21.0")
     with open(clip["final_path"], "rb") as f:
-        _check(requests.post(f"https://rupload.facebook.com/video-upload/{ver}/{vid}", data=f, timeout=600,
-                             headers={"Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)}))
-    _check(requests.post(_graph(f"{page}/video_reels"), data={
-        "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED", "description": _caption(clip, "facebook", _campaign(post)),
-        "access_token": token}, timeout=60))
+        _g("POST", f"https://rupload.facebook.com/video-upload/{ver}/{vid}", token, data=f, timeout=600,
+           headers={"Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)})
+    _g("POST", _graph(f"{page}/video_reels"), token, data={
+        "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED",
+        "description": _caption(clip, "facebook", _campaign(post))}, timeout=60)
     return vid, f"https://www.facebook.com/reel/{vid}"
 
 

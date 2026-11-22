@@ -1,7 +1,6 @@
 """Stage 8: views, likes and US viewer share for every posted clip."""
 import datetime as dt
 
-import requests
 
 from . import config, db, publish, youtube_api
 from .util import iso, utcnow
@@ -38,11 +37,14 @@ def _us_share(p):
 
 def _graph_views(p, token, metrics):
     for metric in metrics:
-        r = requests.get(publish._graph(f"{p['external_id']}/insights" if p["platform"] == "instagram"
-                                        else f"{p['external_id']}/video_insights"),
-                         params={"metric": metric, "access_token": token}, timeout=30)
-        if r.ok and r.json().get("data"):
-            return int(r.json()["data"][0]["values"][0]["value"])
+        try:   # token in a header, so an error can't show it
+            data = publish._g("GET", publish._graph(f"{p['external_id']}/insights" if p["platform"] == "instagram"
+                                                    else f"{p['external_id']}/video_insights"),
+                              token, params={"metric": metric}, timeout=30)
+        except RuntimeError:
+            continue
+        if data.get("data"):
+            return int(data["data"][0]["values"][0]["value"])
     return None
 
 

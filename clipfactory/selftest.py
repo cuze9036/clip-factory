@@ -167,6 +167,32 @@ def _heartbeat():
     return "pinging; Discord hears 'Bot is offline' within about 2 minutes of the laptop stopping"
 
 
+def _meta(platform):
+    """Instagram / Facebook posting keys: reads the account's name with the saved token (nothing is posted)."""
+    def check():
+        from . import publish
+        acc = publish._account(platform, "main")
+        id_env = acc["user_id_env"] if platform == "instagram" else acc["page_id_env"]
+        oid, token = config.env(id_env), config.env(acc["token_env"])
+        if not oid or not token:
+            mode = publish.mode(platform, "main")
+            raise _Skip(f"{id_env} / {acc['token_env']} not set, so you post {platform.title()} clips yourself"
+                        + ("" if mode == "manual" else " (and it isn't in manual_platforms)"))
+        field = "username" if platform == "instagram" else "name"
+        try:   # the token goes in a header, never in the URL, so no error message can show it
+            r = requests.get(publish._graph(oid), params={"fields": field},
+                             headers={"Authorization": f"Bearer {token}"}, timeout=20)
+        except Exception as e:
+            raise RuntimeError(f"could not reach Meta ({type(e).__name__})") from None
+        data = r.json() if r.headers.get("content-type", "").startswith(("application/json", "text/javascript")) else {}
+        if r.status_code != 200 or field not in data:
+            err = (data.get("error") or {}).get("message", f"HTTP {r.status_code}")
+            raise RuntimeError(f"Meta refused the key: {err[:150]}")
+        who = ("@" if platform == "instagram" else "") + str(data[field])
+        return f"{who}: posts go out by themselves"
+    return check
+
+
 def _gmail():
     from . import gmail_watch
     try:
@@ -182,6 +208,7 @@ CHECKS = [
     ("Apify (campaign finder)", _apify), ("Reading YouTube videos", _download), ("Caption font", _font),
     ("Making a clip (first run downloads the speech model, about 500 MB)", _render),
     ("GPU", _gpu), ("Gmail audit watcher", _gmail), ("Offline alert", _heartbeat),
+    ("Instagram posting", _meta("instagram")), ("Facebook posting", _meta("facebook")),
 ]
 
 

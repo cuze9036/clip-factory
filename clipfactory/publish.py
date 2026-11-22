@@ -111,23 +111,54 @@ def youtube_upload(post, clip):
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
 
+    from googleapiclient.errors import HttpError
+
     yt = build("youtube", "v3", credentials=youtube_creds(post["account"]), cache_discovery=False)
+    part, body = youtube_body(post, clip, _campaign(post))
+
+    def send(part, body):
+        media = MediaFileUpload(clip["final_path"], mimetype="video/mp4", chunksize=8 * 1024 * 1024, resumable=True)
+        req = yt.videos().insert(part=part, body=body, media_body=media)
+        resp = None
+        while resp is None:
+            _, resp = req.next_chunk()
+        return resp
+
+    try:
+        resp = send(part, body)
+    except HttpError as e:
+        if "paidProductPlacement" not in str(e):
+            raise
+        # YouTube refused the paid-promotion flag: upload without it (the #Sponsored tag still leads the description)
+        db.log(post["campaign_id"], f"YouTube refused the paid-promotion flag, uploaded without it: {str(e)[:200]}", "warn")
+        body.pop("paidProductPlacementDetails", None)
+        resp = send("snippet,status", body)
+    return resp["id"], f"https://www.youtube.com/shorts/{resp['id']}"
+
+
+def youtube_body(post, clip, campaign):
+    """(part, body) for videos.insert. Paid campaigns: #Sponsored first in the description, and YouTube's own
+    paid-promotion flag (paidProductPlacementDetails.hasPaidProductPlacement)."""
+    from .metadata import strip_tag
     when = parse_iso(post["scheduled_at"])
     status = {"selfDeclaredMadeForKids": False}
     if when > utcnow() + dt.timedelta(minutes=5):
         status.update(privacyStatus="private", publishAt=iso(when))
     else:
         status["privacyStatus"] = "public"
-    tags = [h.lstrip("#") for h in json.loads(clip["hashtags"] or "[]")]
-    body = {"snippet": {"title": clip["title"][:100], "description": clip["description"][:4900], "tags": tags,
+    tag = _disclosure(clip, campaign)
+    desc = strip_tag(clip["description"], tag)
+    if tag:
+        desc = f"{tag}\n\n{desc}"
+    tags = [h.lstrip("#") for h in json.loads(clip["hashtags"] or "[]") if not (tag and h.lower() == tag.lower())]
+    body = {"snippet": {"title": clip["title"][:100], "description": desc[:4900], "tags": tags,
                         "categoryId": "20", "defaultLanguage": "en", "defaultAudioLanguage": "en"},
             "status": status}
-    media = MediaFileUpload(clip["final_path"], mimetype="video/mp4", chunksize=8 * 1024 * 1024, resumable=True)
-    req = yt.videos().insert(part="snippet,status", body=body, media_body=media)
-    resp = None
-    while resp is None:
-        _, resp = req.next_chunk()
-    return resp["id"], f"https://www.youtube.com/shorts/{resp['id']}"
+    part = "snippet,status"
+    if tag:
+        body["paidProductPlacementDetails"] = {"hasPaidProductPlacement": True}
+        part += ",paidProductPlacementDetails"
+    return part, body
 
 
 # ---------- Instagram & Facebook (Graph API, resumable upload of the local file) ----------
@@ -149,13 +180,35 @@ def name(platform):
     return NAMES.get(platform, platform.title())
 
 
-def _caption(clip, platform=None):
-    if platform == "x":   # X posts allow 280 characters: title, credit line and hashtags only
-        tags = " ".join(json.loads(clip["hashtags"] or "[]"))
-        credit = next((ln for ln in (clip["description"] or "").splitlines() if ln.lower().startswith("credit")), "")
-        text = "\n\n".join(p for p in (clip["title"], credit, tags) if p)
-        return text if len(text) <= 280 else text[:277].rsplit(" ", 1)[0] + "..."
-    return f"{clip['title']}\n\n{clip['description']}"[:2200]
+def _campaign(post):
+    from . import campaigns
+    return campaigns.get(post["campaign_id"]) if post else None
+
+
+def _disclosure(clip, campaign):
+    from .metadata import disclosure_tag
+    return disclosure_tag(campaign, json.loads(clip["hashtags"] or "[]"))
+
+
+def _caption(clip, platform=None, campaign=None):
+    """First line: TITLE plus the paid-promotion tag (so it shows before "more"), then the description."""
+    from .metadata import strip_tag
+    tag = _disclosure(clip, campaign)
+    first = f"{clip['title']} {tag}".strip()
+    desc = strip_tag(clip["description"], tag)
+    if platform == "x":   # X posts allow 280 characters: first line, credit line, then hashtags while they fit
+        credit = next((ln for ln in desc.splitlines() if ln.lower().startswith("credit")), "")
+        text = first[:280]
+        if credit and len(text) + 2 + len(credit) <= 280:
+            text += "\n\n" + credit
+        tags = [t for t in json.loads(clip["hashtags"] or "[]") if not (tag and t.lower() == tag.lower())]
+        line = ""
+        for t in tags:
+            if len(text) + 2 + len((line + " " + t).strip()) > 280:
+                break
+            line = (line + " " + t).strip()
+        return text + ("\n\n" + line if line else "")
+    return f"{first}\n\n{desc}".strip()[:2200]
 
 
 def instagram_upload(post, clip):
@@ -164,7 +217,7 @@ def instagram_upload(post, clip):
     if not uid or not token:
         raise RuntimeError(f"Set {acc['user_id_env']} and {acc['token_env']} in .env")
     created = _check(requests.post(_graph(f"{uid}/media"), data={
-        "media_type": "REELS", "upload_type": "resumable", "caption": _caption(clip), "share_to_feed": "true",
+        "media_type": "REELS", "upload_type": "resumable", "caption": _caption(clip, "instagram", _campaign(post)), "share_to_feed": "true",
         "access_token": token}, timeout=60))
     cid = created["id"]
     size = os.path.getsize(clip["final_path"])
@@ -202,7 +255,7 @@ def facebook_upload(post, clip):
         _check(requests.post(f"https://rupload.facebook.com/video-upload/{ver}/{vid}", data=f, timeout=600,
                              headers={"Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)}))
     _check(requests.post(_graph(f"{page}/video_reels"), data={
-        "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED", "description": _caption(clip),
+        "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED", "description": _caption(clip, "facebook", _campaign(post)),
         "access_token": token}, timeout=60))
     return vid, f"https://www.facebook.com/reel/{vid}"
 
@@ -234,7 +287,7 @@ def hand_off(post, clip):
     safe = re.sub(r'[<>:"/\\|?*]+', "", clip["title"] or "clip")[:50].strip()
     base = ready_folder(post["platform"]) / f"#{post['id']} {safe}"
     shutil.copyfile(clip["final_path"], f"{base}.mp4")
-    caption = _caption(clip, post["platform"])
+    caption = _caption(clip, post["platform"], _campaign(post))
     with open(f"{base}.txt", "w", encoding="utf-8") as f:
         f.write(caption)
     db.x("UPDATE posts SET status='manual', error=NULL WHERE id=?", post["id"])

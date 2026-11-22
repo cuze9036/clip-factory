@@ -110,7 +110,7 @@ def run_once():
             gmail_watch.check()
         except Exception as e:
             db.log(None, f"Gmail audit watcher failed: {str(e)[:200]}", "warn")
-    if _due("discovery_last_run", config.section("discovery").get("every_hours", 1) * 60):
+    if _due("discovery_last_run", config.section("discovery").get("every_hours", 6) * 60):
         discovery.run()
 
 

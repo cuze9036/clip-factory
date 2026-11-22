@@ -85,7 +85,8 @@ review:
 
 discovery:                        # finds new clipping campaigns and suggests them on Discord
   enabled: true
-  every_hours: 1                  # new campaigns fill fast; check every hour (uses Apify credit)
+  every_hours: 6                  # each run uses Apify credit (free plan); lower it in config.local.yaml if you
+                                  # have credit to spare. #campaign-feed brings announcements for free, any time.
   apify_actor: fayoussef~whop-clipping-campaigns-scraper   # reads Whop's public campaign listings
   apify_input: {}
   max_listings: 40

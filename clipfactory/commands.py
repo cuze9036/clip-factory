@@ -113,7 +113,7 @@ def suggested():
         auto = "youtube" in c["platforms"]
         rows.append(((not ok, not c["rate_per_1k"], not auto, -c["rate_per_1k"], clippers), c, ok, clippers))
     if not rows:
-        return "No found campaigns waiting. The finder looks again every hour, or type `!find`."
+        return "No found campaigns waiting. The finder looks again every few hours, or type `!find`."
     rows.sort(key=lambda r: r[0])
     db.kv_set("suggested_order", [r[1]["id"] for r in rows])
     out = ["**Found campaigns** (best first)"]

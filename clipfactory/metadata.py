@@ -32,13 +32,34 @@ def write(clip_text, moment, campaign):
 DISCLOSURE = re.compile(r"^#?((?i:sponsored|ad|paidpartnership)|\w+Ad)$")   # #Sponsored, #ad, #NikeAd
 
 
+def disclosure_tag(campaign, hashtags=()):
+    """Paid campaigns (e.g. Whop Content Rewards) need a paid-promotion tag visible before "more": the campaign's
+    own #<Brand>Ad if it asks for one, else #Sponsored. Unpaid lanes (your own channel) get none."""
+    if not campaign or not (campaign.get("rate_per_1k") or 0) > 0:
+        return ""
+    for h in list(campaign.get("required_hashtags") or []) + list(hashtags or []):
+        h = str(h).strip()
+        if DISCLOSURE.match(h):
+            return h if h.startswith("#") else "#" + h
+    return config.section("metadata").get("paid_disclosure") or "#Sponsored"
+
+
+def strip_tag(text, tag):
+    """Text without `tag` (it goes on the first line instead), tidied up."""
+    if not tag:
+        return text or ""
+    text = re.sub(rf"(?<![\w#]){re.escape(tag)}(?!\w)", "", text or "", flags=re.I)
+    lines = [re.sub(r"[ \t]{2,}", " ", ln).strip() for ln in text.splitlines()]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
 def finalize(meta, campaign):
-    required = list(campaign["required_hashtags"])
-    # Paid campaigns (e.g. Whop Content Rewards) require a paid-promotion tag like #Sponsored or #<Brand>Ad.
-    tag = config.section("metadata").get("paid_disclosure", "#Sponsored")
-    if (campaign.get("rate_per_1k") or 0) > 0 and tag and not any(DISCLOSURE.match(str(h)) for h in required + meta["hashtags"]):
-        required.insert(0, tag)
-    tags = list(dict.fromkeys(required + meta["hashtags"]))[:6]
+    # The paid-promotion tag is not stored here: publishing puts it on the first line of every caption.
+    tag = disclosure_tag(campaign, meta["hashtags"])
+    tags = list(dict.fromkeys(list(campaign["required_hashtags"]) + meta["hashtags"]))
+    if tag:
+        tags = [t for t in tags if not DISCLOSURE.match(str(t))]
+    tags = tags[:6]
     parts = [meta["description"]]
     if campaign["credit"]:
         parts.append(campaign["credit"])

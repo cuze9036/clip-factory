@@ -99,7 +99,7 @@ def post_live(limit=8):
     live = live_campaigns()
     running = [c for c in campaigns.all_campaigns() if campaigns.lane_state(c) == "running"]
     if not live:
-        return ("No live campaigns found right now. The finder checks every hour, and #campaign-feed is read "
+        return ("No live campaigns found right now. The finder checks every few hours, and #campaign-feed is read "
                 "as soon as something is posted there. Type `!find` to check now.")
     db.kv_set("suggested_order", [c["id"] for c in live])
     for n, c in enumerate(live[:limit], 1):

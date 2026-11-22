@@ -78,30 +78,28 @@ function Check-Update {
 $Repo = (Select-String -Path (Join-Path $Root "config.yaml") -Pattern '^\s*github_repo:\s*([\w.-]+/[\w.-]+)' |
          Select-Object -First 1).Matches.Groups[1].Value
 $ShaFile = Join-Path $Logs "last-sha.txt"
-$script:Etag = $null
 $script:GhPauseUntil = [DateTime]::MinValue
 
 function Latest-Sha {
-    # A conditional request: "nothing new" (304) doesn't count against GitHub's hourly limit.
-    $headers = @{ "Accept" = "application/vnd.github.sha"; "User-Agent" = "clip-factory-updater" }
-    if ($script:Etag) { $headers["If-None-Match"] = $script:Etag }
+    # The same address "git ls-remote" uses: always fresh, and not under the GitHub API's 60-requests-an-hour
+    # limit (which every 10-second check used up, so updates stalled).
     if ((Get-Date) -lt $script:GhPauseUntil) { return $null }
     try {
-        $r = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/$Repo/commits/main" -Headers $headers -TimeoutSec 8
+        $r = Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$Repo.git/info/refs?service=git-upload-pack" `
+            -UserAgent "git/2.45.0" -TimeoutSec 8
     } catch {
-        # 304 = nothing new (Windows PowerShell reports it as an error). 403/429 = GitHub's hourly limit: wait 10 min.
         $code = 0
         try { $code = [int]$_.Exception.Response.StatusCode } catch { }
-        if ($code -eq 403 -or $code -eq 429) {
-            $script:GhPauseUntil = (Get-Date).AddMinutes(10)
-            Log "GitHub asked to slow down; checking again in 10 minutes"
+        if ($code -eq 429 -or $code -eq 403) {
+            $script:GhPauseUntil = (Get-Date).AddMinutes(2)
+            Log "GitHub asked to slow down; checking again in 2 minutes"
         }
         return $null
     }
-    $script:Etag = $r.Headers["ETag"]
     $body = $r.Content
     if ($body -is [byte[]]) { $body = [Text.Encoding]::ASCII.GetString($body) }
-    return "$body".Trim()
+    if ("$body" -match '([0-9a-f]{40}) refs/heads/main') { return $Matches[1] }
+    return $null
 }
 
 function Check-GitHub {

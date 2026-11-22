@@ -4,35 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clip Factory</title>
-<meta name="description" content="Clip Factory is a personal tool that turns long gameplay videos into short vertical clips and uploads them to its owner's own YouTube channel.">
 <style>
 :root{--bg:#f6f7f9;--fg:#15181f;--muted:#5b6170;--line:#dde0e7;--accent:#c2410c}
 @media (prefers-color-scheme:dark){:root{--bg:#121419;--fg:#e8eaf0;--muted:#9ea4b3;--line:#2b303b;--accent:#fb923c;color-scheme:dark}}
 body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:720px;margin:0 auto;padding:56px 20px 80px}
-h1{font-size:2.2rem;margin:0 0 8px;letter-spacing:-.02em}
-h2{font-size:1.2rem;margin:36px 0 8px}
+h1{font-size:2rem;margin:0 0 4px;letter-spacing:-.02em}
+h2{font-size:1.15rem;margin:32px 0 8px}
 p,li{color:var(--muted)}
 a{color:var(--accent)}
+.date{font-size:.9rem}
+.badge{display:inline-flex;align-items:center;gap:8px;margin:4px 0 20px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;font-size:.9rem;color:var(--fg)}
+.badge b{color:#cc0000}
+nav a{margin-right:16px}
 footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:.9rem;color:var(--muted)}
 </style>
 </head>
 <body>
 <main>
 <h1>Clip Factory</h1>
-<p>Clip Factory is a personal, non-commercial tool. It finds the best moments in long gameplay videos, turns them into short vertical clips with captions, and uploads them to its owner's own YouTube channel.</p>
+<span class="badge">Uses <b>YouTube</b> API Services</span>
+<p>Clip Factory is a personal tool that runs on its owner's own computer. It finds the best moments in long videos, turns them into short vertical clips with captions, and uploads them to the owner's own YouTube channel as YouTube Shorts.</p>
+<p>The videos it clips are the owner's own gameplay recordings and content from creators whose clipping programs allow it. It is used only by its owner and does not offer accounts, sign-ups or services to anyone else.</p>
 
 <h2>What it does with YouTube</h2>
 <ul>
-  <li>Uploads short videos to the owner's own channel, with a title, description and scheduled publish time.</li>
-  <li>Reads view and like counts, and the viewer country breakdown, for those uploads.</li>
+  <li>Signs in to the owner's YouTube channel with Google's OAuth consent screen.</li>
+  <li>Uploads short videos to that channel with a title, description, tags and a scheduled publish time (YouTube Data API v3, videos.insert).</li>
+  <li>Reads view and like counts and the viewer country breakdown for those uploads (YouTube Data API v3 and YouTube Analytics API).</li>
 </ul>
-<p>It is used only by its owner. It does not offer accounts, sign-ups or services to anyone else.</p>
+<p>By using Clip Factory you agree to be bound by the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>.</p>
 
-<h2>Privacy</h2>
-<p>Read the <a href="privacy.html">privacy policy</a> to see what data the tool uses and how to remove its access.</p>
-
-<footer>Contact: open an issue at <a href="https://github.com/cuze9036/clip-factory/issues">github.com/cuze9036/clip-factory/issues</a></footer>
+<h2>Privacy and terms</h2>
+<p>Read the <a href="privacy.html">Privacy Policy</a> to see what data the tool uses, how it is stored and deleted, and how to remove its access. Read the <a href="terms.html">Terms of Service</a> for the rules of use.</p>
+<footer><nav><a href="index.html">Home</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Service</a></nav>
+<p>Contact: open an issue at <a href="https://github.com/cuze9036/clip-factory/issues">github.com/cuze9036/clip-factory/issues</a></p></footer>
 </main>
 </body>
 </html>

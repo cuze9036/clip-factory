@@ -50,7 +50,10 @@ def refresh():
     since = iso(utcnow() - dt.timedelta(days=45))
     posts = db.q("SELECT * FROM posts WHERE status IN ('posted','uploaded') AND external_id IS NOT NULL "
                  "AND posted_at >= ?", since)
-    yt = [p for p in posts if p["platform"] == "youtube"]
+    # YouTube stats are refreshed for every upload, not only recent ones: Google's policy says stored
+    # API data must be refreshed at least every 30 days, and purge_stale() deletes what could not be.
+    yt = db.q("SELECT * FROM posts WHERE platform='youtube' AND status IN ('posted','uploaded') "
+              "AND external_id IS NOT NULL")
     for i in range(0, len(yt), 50):
         try:
             _youtube(yt[i:i + 50])
@@ -69,5 +72,13 @@ def refresh():
                 db.x("UPDATE posts SET views=?, stats_at=? WHERE id=?", v, iso(utcnow()), p["id"])
         except Exception as e:
             db.log(p["campaign_id"], f"{p['platform']} stats failed: {e}", "warn")
+    purge_stale()
     db.kv_set("stats_last_run", iso(utcnow()))
     return len(posts)
+
+
+def purge_stale(days=30):
+    """Delete YouTube statistics that have not been refreshed for `days` days (e.g. after access was removed)."""
+    cutoff = iso(utcnow() - dt.timedelta(days=days))
+    return db.conn().execute("UPDATE posts SET views=0, likes=0, us_share=NULL, stats_at=NULL "
+                             "WHERE platform='youtube' AND stats_at IS NOT NULL AND stats_at < ?", (cutoff,)).rowcount

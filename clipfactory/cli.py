@@ -26,6 +26,8 @@ def main(argv=None):
     sub.add_parser("stats", help="refresh views now")
     au = sub.add_parser("auth-youtube", help="connect a YouTube channel")
     au.add_argument("account", nargs="?", default="main")
+    fy = sub.add_parser("forget-youtube", help="revoke the YouTube login and delete its token and YouTube statistics")
+    fy.add_argument("account", nargs="?", default="main")
     d = sub.add_parser("dashboard", help="open the local dashboard")
     d.add_argument("--host", default="127.0.0.1")
     d.add_argument("--port", type=int, default=8787)
@@ -90,6 +92,11 @@ def main(argv=None):
     elif args.cmd == "auth-youtube":
         from . import publish
         publish.youtube_auth(args.account)
+    elif args.cmd == "forget-youtube":
+        from . import publish
+        revoked, n = publish.youtube_forget(args.account)
+        print(("Access revoked at Google. " if revoked else "") +
+              f"Deleted the saved YouTube login and cleared statistics on {n} post(s).")
     elif args.cmd == "dashboard":
         from . import web
         print(f"Dashboard: http://{args.host}:{args.port}")

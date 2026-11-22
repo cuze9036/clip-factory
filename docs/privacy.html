@@ -14,40 +14,53 @@ h2{font-size:1.15rem;margin:32px 0 8px}
 p,li{color:var(--muted)}
 a{color:var(--accent)}
 .date{font-size:.9rem}
+.badge{display:inline-flex;align-items:center;gap:8px;margin:4px 0 20px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;font-size:.9rem;color:var(--fg)}
+.badge b{color:#cc0000}
+nav a{margin-right:16px}
 footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:.9rem;color:var(--muted)}
 </style>
 </head>
 <body>
 <main>
 <h1>Privacy Policy</h1>
-<p class="date">Clip Factory · Last updated November 21, 2026</p>
+<p class="date">Clip Factory · Last updated November 22, 2026</p>
+<span class="badge">Uses <b>YouTube</b> API Services</span>
 
-<p>Clip Factory is a personal tool that runs on its owner's own computer. It is used only by its owner, to manage the owner's own YouTube channel. This policy explains what Google user data it uses.</p>
+<p>Clip Factory is a personal tool that runs on its owner's own computer and is used only by its owner, to manage the owner's own YouTube channel. This policy explains what data it uses.</p>
+
+<h2>YouTube API Services</h2>
+<p>Clip Factory uses YouTube API Services. By using it you agree to be bound by the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>. Google's handling of your data is described in the <a href="https://policies.google.com/privacy">Google Privacy Policy</a> (<a href="http://www.google.com/policies/privacy">www.google.com/policies/privacy</a>).</p>
 
 <h2>Data it accesses</h2>
-<p>With the owner's permission, through Google's OAuth sign-in, Clip Factory uses these YouTube permissions:</p>
+<p>With the owner's permission, given on Google's OAuth consent screen, Clip Factory uses these permissions:</p>
 <ul>
   <li><b>Upload videos</b> (youtube.upload): to publish short clips to the owner's channel.</li>
-  <li><b>View the YouTube account</b> (youtube.readonly): to read view and like counts of those uploads.</li>
+  <li><b>View the YouTube account</b> (youtube.readonly): to read the view and like counts of those uploads.</li>
   <li><b>View YouTube Analytics reports</b> (yt-analytics.readonly): to see which countries the views come from.</li>
 </ul>
 
-<h2>How the data is used</h2>
+<h2>How the data is used, stored and shared</h2>
 <ul>
-  <li>Only to upload the owner's clips and to show the owner how they perform.</li>
-  <li>The sign-in token and statistics are stored only on the owner's computer.</li>
-  <li>No Google user data is sold, shared with third parties, or used for advertising.</li>
-  <li>No data from other people's accounts is collected.</li>
+  <li>It is used only to upload the owner's clips and to show the owner how they perform.</li>
+  <li>The OAuth token and the statistics are stored only on the owner's computer, in a file only the owner's Windows account can read. Nothing is stored on any server run by Clip Factory.</li>
+  <li>No Google user data is sold, shared with third parties, or used for advertising. No data from other people's accounts is collected.</li>
+  <li>Clip Factory does not use cookies and does not store or read information on users' devices other than its own token and database files.</li>
 </ul>
 <p>Clip Factory's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
 <h2>Keeping and deleting data</h2>
-<p>Data stays on the owner's computer until the owner deletes it. Access can be removed at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, which stops Clip Factory from using the account.</p>
+<ul>
+  <li>Video statistics are refreshed every few hours. If they cannot be refreshed (for example after access is removed), they are deleted automatically within 30 days.</li>
+  <li><b>Remove access at any time</b> on Google's security settings page: <a href="https://security.google.com/settings/security/permissions">security.google.com/settings/security/permissions</a> (also at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>).</li>
+  <li><b>Delete all YouTube data</b> with the command <code>clipfactory forget-youtube</code>. It revokes the token at Google, deletes it from the computer, and deletes the stored YouTube statistics right away.</li>
+  <li>After access is removed at Google, the stored token stops working at once.</li>
+  <li>To ask for deletion or for a copy of the data, contact us below; requests are handled within 7 days.</li>
+</ul>
 
 <h2>Contact</h2>
 <p>Questions about this policy: open an issue at <a href="https://github.com/cuze9036/clip-factory/issues">github.com/cuze9036/clip-factory/issues</a>.</p>
-
-<footer><a href="index.html">Clip Factory home</a></footer>
+<footer><nav><a href="index.html">Home</a><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Service</a></nav>
+<p>Contact: open an issue at <a href="https://github.com/cuze9036/clip-factory/issues">github.com/cuze9036/clip-factory/issues</a></p></footer>
 </main>
 </body>
 </html>

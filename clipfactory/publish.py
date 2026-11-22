@@ -64,6 +64,22 @@ def youtube_auth(account="main"):
     print(f"Saved YouTube token to {token}")
 
 
+def youtube_forget(account="main"):
+    """Revoke the YouTube login at Google, delete the saved token and the stored YouTube statistics."""
+    token = config.path(_account("youtube", account)["token_file"])
+    revoked = False
+    if token.exists():
+        data = json.loads(token.read_text() or "{}")
+        t = data.get("refresh_token") or data.get("token")
+        if t:
+            r = requests.post("https://oauth2.googleapis.com/revoke", data={"token": t}, timeout=30)
+            revoked = r.status_code == 200
+        token.unlink()
+    n = db.conn().execute("UPDATE posts SET views=0, likes=0, us_share=NULL, stats_at=NULL "
+                          "WHERE platform='youtube' AND account=?", (account,)).rowcount
+    return revoked, n
+
+
 def youtube_creds(account):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials

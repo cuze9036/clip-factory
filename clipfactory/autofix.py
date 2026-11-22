@@ -1,4 +1,4 @@
-"""Fixes the tool's own problems by itself, about once an hour, and says what it did in #ai-insights.
+"""Fixes the tool's own problems by itself, every few minutes, and says what it did in #ai-insights.
 
 Safe fixes it makes (each item at most twice, so nothing loops forever):
 - videos, moments and clips that failed or got stuck are retried
@@ -130,14 +130,26 @@ def diagnose():
         try:
             d, _ = llm.complete_json("diagnose", DIAGNOSE.format(count=n, error=sample[key]), _diag_validate)
         except llm.LLMError:
-            continue
-        lines = [f"🔍 **{key}** ×{n}", f"Why: {d['cause']}"]
+            d = {"cause": "", "owner_fix": "", "needs_code_fix": n >= 3}   # no AI answer: repeated errors still go to Claude Code
+        lines = [f"🔍 **{key}** ×{n}"]
+        if d["cause"]:
+            lines.append(f"Why: {d['cause']}")
         if d["owner_fix"]:
             lines.append(f"You can: {d['owner_fix']}")
         if d["needs_code_fix"]:
-            from .commands import version
-            lines.append("Needs a code fix. Send this to Claude Code:\n```\nClip Factory error (version "
-                         f"{version()}), {n}x in 24 h:\n{sample[key]}\n```")
+            from . import bugreport
+            try:
+                number = bugreport.report(key, n, sample[key], d["cause"], d["owner_fix"])
+            except Exception as e:
+                number = None
+                db.log(None, f"Couldn't report the bug to GitHub: {str(e)[:120]}", "warn")
+            if number:
+                lines.append(f"Needs a code fix: reported to Claude Code (GitHub issue #{number}). "
+                             "The fix arrives on the laptop by itself.")
+            else:
+                from .commands import version
+                lines.append("Needs a code fix. Send this to Claude Code:\n```\nClip Factory error (version "
+                             f"{version()}), {n}x in 24 h:\n{sample[key]}\n```")
         out.append("\n".join(lines))
     return out
 

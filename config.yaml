@@ -134,7 +134,7 @@ insights:                         # weekly self-review with the free AI (Gemini 
   every_days: 7
   daily_check_hours: 24           # daily check of problems (errors, stuck work, missed posts, budgets)
   autofix: true                   # fix safe problems by itself (retries, Telegram fallback, reminders)
-  autofix_every_minutes: 60
+  autofix_every_minutes: 5        # safe fixes + bug reports; errors are explained at most once a day each
   autofix_max_tries: 2            # each failed item is retried at most this many times
   min_posts: 5                    # posts with views needed before it gives advice or changes anything
 

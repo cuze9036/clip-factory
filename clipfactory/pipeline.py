@@ -133,7 +133,7 @@ def run_once():
         except Exception as e:
             db.log(None, f"Gmail audit watcher failed: {str(e)[:200]}", "warn")
     ins = config.section("insights")
-    if ins.get("autofix", True) and _due("autofix_last_run", ins.get("autofix_every_minutes", 60)):
+    if ins.get("autofix", True) and _due("autofix_last_run", ins.get("autofix_every_minutes", 5)):
         try:
             from . import autofix
             autofix.run()

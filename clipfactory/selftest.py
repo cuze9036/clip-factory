@@ -193,6 +193,13 @@ def _meta(platform):
     return check
 
 
+def _bugs():
+    from . import bugreport
+    if not bugreport.configured():
+        raise _Skip("GITHUB_ISSUES_TOKEN not set, so code bugs aren't reported to Claude Code by themselves")
+    return bugreport.selftest_line()
+
+
 def _gmail():
     from . import gmail_watch
     try:
@@ -209,6 +216,7 @@ CHECKS = [
     ("Making a clip (first run downloads the speech model, about 500 MB)", _render),
     ("GPU", _gpu), ("Gmail audit watcher", _gmail), ("Offline alert", _heartbeat),
     ("Instagram posting", _meta("instagram")), ("Facebook posting", _meta("facebook")),
+    ("Bug reports to Claude Code", _bugs),
 ]
 
 

@@ -64,12 +64,41 @@ class Bot(discord.Client):
         self.feed_id = None
 
     async def setup_hook(self):
+        self.tree = discord.app_commands.CommandTree(self)
+        for name, (about, box) in commands.SLASH.items():
+            self.tree.add_command(self._slash(name, about, box))
         self.loop.create_task(self.drain_outbox())
+
+    def _slash(self, name, about, box):
+        """A real Discord slash command (shows up in the / menu) that runs the same as typing !name."""
+        async def run(interaction, details: str = ""):
+            if not self._allowed(interaction.user.id, interaction.channel_id):
+                await interaction.response.send_message("Only the owner can use this here.", ephemeral=True)
+                return
+            await interaction.response.defer(thinking=True)
+            reply = await asyncio.to_thread(commands.handle, f"!{name} {details}".strip()) or "Done."
+            for i in range(0, len(reply), 1900):
+                await interaction.followup.send(reply[i:i + 1900])
+
+        if box is None:
+            async def callback(interaction: discord.Interaction):
+                await run(interaction)
+        else:
+            async def callback(interaction: discord.Interaction, details: str = ""):
+                await run(interaction, details)
+            callback = discord.app_commands.describe(details=box)(callback)
+        return discord.app_commands.Command(name=name, description=about[:100], callback=callback)
 
     async def on_ready(self):
         db.log(None, f"Discord bot online as {self.user}")
         ch = self.get_channel(self.channel_id) or await self.fetch_channel(self.channel_id)
-        await ch.send(f"Clip Factory is running (version {commands.version()}). Type `!help` for commands.")
+        await ch.send(f"Clip Factory is running (version {commands.version()}). Type `/` or `!help` for commands.")
+        if ch.guild:
+            try:   # a server-only sync shows the / menu right away
+                self.tree.copy_global_to(guild=ch.guild)
+                await self.tree.sync(guild=ch.guild)
+            except discord.HTTPException as e:
+                db.log(None, f"Slash commands not registered: {e}", "warn")
         name = (config.section("discord").get("feed_channel") or "").lstrip("#")
         feed = discord.utils.get(ch.guild.text_channels, name=name) if name and ch.guild else None
         if feed:
@@ -137,7 +166,7 @@ class Bot(discord.Client):
 
     async def on_interaction(self, interaction):
         if interaction.type != discord.InteractionType.component:
-            return
+            return   # slash commands are handled by the command tree
         if not self._allowed(interaction.user.id, interaction.channel_id):
             await interaction.response.send_message("Only the owner can use these buttons.", ephemeral=True)
             return

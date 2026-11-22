@@ -18,6 +18,36 @@ HELP = """**Clip Factory commands**
 `!selftest` check every part of the tool (takes 1-5 min) · `!version` which version is running · `!retry` remake failed clips · `!remake <clip>` remake one clip with the current look"""
 
 
+# Discord slash commands: name -> (what it does, what goes in the "details" box, or None for no box)
+SLASH = {
+    "campaign": ("Live campaigns with Open / I joined buttons", "optional: paste a campaign page"),
+    "status": ("Every lane's numbers", None),
+    "review": ("Clips waiting for you", None),
+    "approve": ("Approve a clip", "clip number, optional title 1-3"),
+    "reject": ("Reject a clip", "clip number, optional reason"),
+    "cancel": ("Stop a clip's scheduled posts", "clip number"),
+    "todo": ("Clips to post yourself and links to submit", None),
+    "posted": ("You posted a clip yourself", "post number and the link"),
+    "submitted": ("You submitted a post on the campaign page", "post number"),
+    "suggested": ("All campaigns the finder found", None),
+    "activate": ("Start a campaign's lane", "campaign number or id"),
+    "ignore": ("Hide a campaign", "campaign number or id"),
+    "pause": ("Pause a lane", "campaign id"),
+    "resume": ("Resume a lane", "campaign id"),
+    "source": ("Tell a campaign where its content is", "campaign number or id, then the link or folder"),
+    "add": ("Clip one video", "video link, then campaign id"),
+    "find": ("Look for new campaigns now", None),
+    "emails": ("Google audit emails from the last 7 days", None),
+    "campaigns": ("Every campaign and its state", None),
+    "selftest": ("Check every part of the tool (1-5 min)", None),
+    "version": ("Which version is running", None),
+    "retry": ("Remake failed clips", None),
+    "remake": ("Remake one clip with the current look", "clip number"),
+    "cleanup": ("Remove duplicate suggestions", None),
+    "help": ("All commands", None),
+}
+
+
 def version():
     from . import config
     f = config.path("VERSION")

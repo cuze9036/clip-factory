@@ -81,18 +81,19 @@ def _avg(xs):
 def collect(days=7):
     since = iso(utcnow() - dt.timedelta(days=days))
     posts = db.q("""SELECT p.id, p.platform, p.scheduled_at, p.posted_at, p.views, p.likes, p.status, p.mode,
-                           c.name campaign, k.title, m.category, m.score, m.hook
+                           c.name campaign, k.title, k.style, m.category, m.score, m.hook
                     FROM posts p JOIN clips k ON k.id=p.clip_id JOIN campaigns c ON c.id=p.campaign_id
                     LEFT JOIN moments m ON m.id=k.moment_id
                     WHERE p.scheduled_at >= ? AND p.scheduled_at <= ?""", since, iso(utcnow()))
     done = [p for p in posts if p["status"] in ("posted", "uploaded") and p["posted_at"]]
-    by = {k: defaultdict(list) for k in ("platform", "slot", "category", "campaign", "score")}
+    by = {k: defaultdict(list) for k in ("platform", "slot", "category", "campaign", "score", "style")}
     for p in done:
         v = p["views"] or 0
         by["platform"][p["platform"]].append(v)
         by["slot"][f"{p['platform']} {_slot(parse_iso(p['scheduled_at']), p['platform'])}"].append(v)
         by["category"][p["category"] or "unknown"].append(v)
         by["campaign"][p["campaign"]].append(v)
+        by["style"][p["style"] or "older look"].append(v)
         by["score"]["AI score 9-10" if (p["score"] or 0) >= 9 else "AI score below 9"].append(v)
     table = {k: {name: {"posts": len(vs), "avg_views": _avg(vs)} for name, vs in g.items()} for k, g in by.items()}
     ranked = sorted(done, key=lambda p: -(p["views"] or 0))
@@ -115,7 +116,7 @@ def collect(days=7):
         "days": days, "posts_made": len(done), "posts_scheduled": len(posts),
         "total_views": sum(p["views"] or 0 for p in done),
         "by_platform": table["platform"], "by_posting_slot_ET": table["slot"], "by_moment_type": table["category"],
-        "by_campaign": table["campaign"], "ai_score_vs_views": table["score"],
+        "by_campaign": table["campaign"], "by_edit_style": table["style"], "ai_score_vs_views": table["score"],
         "best_clips": [clip(p) for p in ranked[:5]], "worst_clips": [clip(p) for p in ranked[-5:][::-1]] if len(ranked) > 5 else [],
         "hand_posts_not_made": len(missed), "rejected_clips": dict(reasons), "errors": dict(errors), "pipeline": flow,
     }

@@ -11,7 +11,8 @@ from . import campaigns, db, llm, notify
 STEP = 3.0   # seconds per "earlier / later / longer / shorter" tap
 
 OPS = {"titles": "✏️ New titles", "earlier": "⏪ Start 3 s earlier", "later": "⏩ Start 3 s later",
-       "longer": "➕ 3 s longer", "shorter": "➖ 3 s shorter", "other": "🔀 Different moment"}
+       "longer": "➕ 3 s longer", "shorter": "➖ 3 s shorter", "style": "🎨 Different style",
+       "other": "🔀 Different moment"}
 
 PROMPT = """The owner of a clipping tool didn't like a short clip and wrote what to change.
 The clip is cut from {start:.0f}s to {end:.0f}s of a longer video ({length:.0f} seconds long).
@@ -122,6 +123,13 @@ def apply(clip_id, op):
     if op == "titles":
         _new_titles(clip, "")
         return f"Clip #{clip_id}: new titles are coming for review."
+    if op == "style":
+        if not clip["raw_path"]:
+            return f"Clip #{clip_id} has no source file to edit again."
+        _stop_posts(clip_id)
+        db.kv_set(f"restyle:{clip_id}", clip.get("style") or "")
+        db.x("UPDATE clips SET status='downloaded', error=NULL WHERE id=?", clip_id)
+        return f"Clip #{clip_id} is being edited again in a different style. It comes back for review in a few minutes."
     if op == "other":
         _drop(clip_id, "re-edit: different moment")
         return f"Clip #{clip_id} dropped. The next moment from this video becomes a clip instead."

@@ -9,3 +9,4 @@ Ready to post/
 config.local.yaml
 logs/
 *.egg-info/
+assets/fonts/

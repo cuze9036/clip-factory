@@ -6,7 +6,7 @@ import time
 import traceback
 
 from . import (analytics, campaigns, config, db, discovery, download, metadata, moments, publish, render,
-               review, transcribe, watcher)
+               review, styles, transcribe, watcher)
 from .util import iso, parse_iso, utcnow
 
 
@@ -52,6 +52,19 @@ def _source_layout(v):
     return layout, json.loads(s["facecam"]) if s["facecam"] else None
 
 
+def pick_style(c, m, layout, face, clip):
+    """The edit style: a campaign's fixed choice, else one that fits the content (varied for the weekly review).
+    'framed' / 'blur' set in config.yaml keep the older looks."""
+    fixed = config.section("render").get("style", "auto")
+    if fixed in ("framed", "legacy"):
+        return None
+    avoid = db.kv_get(f"restyle:{clip['id']}")   # a re-edit asked for a different style
+    if avoid:
+        db.kv_set(f"restyle:{clip['id']}", None)
+    return styles.choose(c["topic"], m["category"] or "", facecam=bool(layout == "facecam_split" and face),
+                         avoid=avoid)
+
+
 def stage_render(c, limit=1):
     for clip in db.q("SELECT * FROM clips WHERE campaign_id=? AND status='downloaded' ORDER BY id LIMIT ?", c["id"], limit):
         m = db.one("SELECT * FROM moments WHERE id=?", clip["moment_id"])
@@ -60,9 +73,11 @@ def stage_render(c, limit=1):
             words = transcribe.words(clip["raw_path"])
             layout, face = _source_layout(v)
             final = clip["raw_path"].replace("_raw.mp4", "_final.mp4")
-            res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"])
-            db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, status='rendered' WHERE id=?",
-                 res["path"], res["duration"], json.dumps(words), clip["id"])
+            style = pick_style(c, m, layout, face, clip)
+            res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"],
+                                style=style, accent=styles.accent_for(c["topic"], m["category"] or ""))
+            db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, style=?, status='rendered' WHERE id=?",
+                 res["path"], res["duration"], json.dumps(words), style, clip["id"])
         except Exception as e:
             db.x("UPDATE clips SET status='failed', error=? WHERE id=?", str(e)[:500], clip["id"])
             db.log(c["id"], f"Render failed for clip {clip['id']}: {e}", "error")

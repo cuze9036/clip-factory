@@ -159,20 +159,26 @@ def video_filter(layout, facecam, cfg, src):
             f"[b]scale=-2:{fg_h},crop='min(iw,{W})':{fg_h}[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[v0]")
 
 
-def render(raw, out, words, hook, layout="blur", facecam=None, credit=""):
+def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=None, accent=None):
+    """style: one of styles.STYLE_NAMES (the researched viral looks); without it the older layouts are used."""
+    from . import styles
     cfg = config.section("render")
     raw, out = pathlib.Path(raw), pathlib.Path(out)
     src = ffprobe(raw)
     dur = src["duration"]
     ass = out.with_suffix(".ass")
-    if layout == "framed":
-        ass.write_text(build_framed_ass(words, hook, dur, cfg, framed_geometry(src, cfg), credit), encoding="utf-8")
-    else:
-        ass.write_text(build_ass(words, hook, dur, cfg), encoding="utf-8")
-
-    vf = video_filter(layout, facecam, cfg, src)
-    fps = f",fps={cfg.get('max_fps', 60)}" if src["fps"] > cfg.get("max_fps", 60) + 0.5 else ""
     fonts = config.path(cfg.get("fonts_dir", "assets/fonts"))
+    if style in styles.STYLE_NAMES:
+        styles.ensure_fonts(fonts)
+        ass.write_text(styles.build_ass(style, words, hook, dur, credit, accent or "#FFD400"), encoding="utf-8")
+        vf = styles.video_filter(style, src, facecam, dur)
+    else:
+        if layout == "framed":
+            ass.write_text(build_framed_ass(words, hook, dur, cfg, framed_geometry(src, cfg), credit), encoding="utf-8")
+        else:
+            ass.write_text(build_ass(words, hook, dur, cfg), encoding="utf-8")
+        vf = video_filter(layout, facecam, cfg, src)
+    fps = f",fps={cfg.get('max_fps', 60)}" if src["fps"] > cfg.get("max_fps", 60) + 0.5 else ""
     fontsdir = f":fontsdir='{_escape_filter_path(fonts)}'" if fonts.is_dir() else ""
     vf += f";[v0]ass='{_escape_filter_path(ass)}'{fontsdir}{fps},format=yuv420p[v]"
 

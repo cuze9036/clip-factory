@@ -72,6 +72,7 @@ MIGRATIONS = [
     ("campaigns", "seen_at", "TEXT"),
     ("posts", "delivered_at", "TEXT"),
     ("posts", "reminded_at", "TEXT"),
+    ("clips", "style", "TEXT"),
 ]
 
 _local = threading.local()

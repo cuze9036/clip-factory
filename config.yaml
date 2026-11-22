@@ -43,7 +43,9 @@ render:
   highlight_color: "&H0000D4FF&"  # ASS colour (BGR): #FFD400 yellow
   hook_seconds: 2.5
   blur_fg_height: 760             # gameplay height in the blur layout
-  default_layout: framed          # framed | blur | facecam_split | crop
+  style: auto                     # auto = a researched viral style per clip (bold_crop, word_pop, blur_box,
+                                  # black_title, meme_top, split), or name one; "framed" = the old white look
+  default_layout: framed          # older layouts, used only when style is "framed"
   framed_background: white        # white | blur | black (framed layout)
   framed_video_top: 576           # pixels from the top where the video starts
   framed_max_video_height: 1000

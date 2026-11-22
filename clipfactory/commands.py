@@ -11,6 +11,7 @@ HELP = """**Clip Factory commands**
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
+`!insights` this week's review (also sent by itself every week)
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -40,6 +41,7 @@ SLASH = {
     "source": ("Tell a campaign where its content is", "campaign number or id, then the link or folder"),
     "add": ("Clip one video", "video link, then campaign id"),
     "find": ("Look for new campaigns now", None),
+    "insights": ("This week's review: what works, what doesn't, what to change", None),
     "emails": ("Google audit emails from the last 7 days", None),
     "campaigns": ("Every campaign and its state", None),
     "selftest": ("Check every part of the tool (1-5 min)", None),
@@ -347,6 +349,9 @@ def handle(text):
                 joinflow.done_waiting()
                 return guide.add(cid, text)
             return guide.show(cid)
+        if cmd == "!insights":
+            from . import insights
+            return insights.run(send=False)
         if cmd == "!emails":
             from . import gmail_watch
             return gmail_watch.emails_command()

@@ -112,6 +112,16 @@ def run_once():
             gmail_watch.check()
         except Exception as e:
             db.log(None, f"Gmail audit watcher failed: {str(e)[:200]}", "warn")
+    ins = config.section("insights")
+    if ins.get("enabled", True):
+        if not db.kv_get("insights_last_run"):
+            db.kv_set("insights_last_run", iso(utcnow()))   # first week starts now
+        elif _due("insights_last_run", ins.get("every_days", 7) * 24 * 60):
+            try:
+                from . import insights
+                insights.run()
+            except Exception as e:
+                db.log(None, f"Weekly review failed: {str(e)[:200]}", "warn")
     if _due("discovery_last_run", config.section("discovery").get("every_hours", 6) * 60):
         discovery.run()
 

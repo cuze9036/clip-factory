@@ -122,6 +122,11 @@ discord:
   feed_channel: campaign-feed     # follow clipping communities' announcement channels into this channel;
                                   # the bot reads every post there and turns campaigns into suggestions
 
+insights:                         # weekly self-review with the free AI (Gemini / Free LLM API)
+  enabled: true
+  every_days: 7
+  min_posts: 5                    # posts with views needed before it gives advice or changes anything
+
 gmail_watch:                      # reads Google's YouTube API audit emails (read-only) and posts them to Discord
   enabled: true                   # does nothing until you run: clipfactory auth-gmail main
   account: main

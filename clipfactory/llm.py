@@ -218,8 +218,8 @@ American English only."""
 
 def rules_block(campaign):
     """The campaign's rules plus its guide (reference material), for every AI prompt about this campaign."""
-    from . import guide
+    from . import guide, insights
     rules = list(campaign.get("rules") or []) + guide.lines(campaign)
-    if not rules:
-        return ""
-    return "\n\nCampaign rules and guide from the creator (follow them):\n" + "\n".join(f"- {r}" for r in rules)
+    block = ("\n\nCampaign rules and guide from the creator (follow them):\n" + "\n".join(f"- {r}" for r in rules)
+             if rules else "")
+    return block + insights.tips_block()   # what the weekly review learned from our own views

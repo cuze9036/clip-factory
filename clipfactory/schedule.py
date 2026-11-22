@@ -32,6 +32,9 @@ def next_slot(c, platform, account, not_before=None):
     offset = dt.timedelta(0) if slots else \
         dt.timedelta(minutes=(cfg.get("platform_offset_min") or {}).get(platform, 0))
     slots = slots or cfg.get("slots", ["12:30"])
+    from . import insights
+    weak = insights.skipped_slots(platform)   # slots the weekly review found clearly weaker
+    slots = [s for s in slots if s not in weak] or slots
     jitter = cfg.get("slot_jitter_min", 12)   # posts land a few minutes around each slot, like a person posting
     earliest = max(utcnow() + dt.timedelta(minutes=15), not_before or utcnow())
     taken = _taken(platform, account)

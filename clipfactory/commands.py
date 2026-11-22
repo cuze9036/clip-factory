@@ -12,7 +12,7 @@ HELP = """**Clip Factory commands**
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
-`!reedit <clip> [what to change]` make a clip again your way · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
+`!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -44,6 +44,7 @@ SLASH = {
     "find": ("Look for new campaigns now", None),
     "ai": ("Which AI did the work today (free models vs Gemini)", None),
     "reedit": ("Make a clip again your way", "clip number, then what to change (optional)"),
+    "remake": ("Edit a clip again in the current style, or all of them", "clip number, or: all"),
     "fix": ("Fix what it can right now (retries, Telegram fallback) and explain errors", None),
     "check": ("Daily check now: problems and what to do", None),
     "insights": ("This week's review: what works, what doesn't, what to change", None),
@@ -52,7 +53,6 @@ SLASH = {
     "selftest": ("Check every part of the tool (1-5 min)", None),
     "version": ("Which version is running", None),
     "retry": ("Remake failed clips", None),
-    "remake": ("Remake one clip with the current look", "clip number"),
     "cleanup": ("Remove duplicate suggestions", None),
     "help": ("All commands", None),
 }
@@ -348,6 +348,8 @@ def handle(text):
             from . import discovery
             cid, ok = discovery.add_from_text(rest, origin="pasted")
             return None  # the suggestion message with buttons comes from the outbox
+        if cmd == "!remake" and args and args[0].lower() == "all":
+            return remake_all()
         if cmd == "!remake":
             clip = db.one("SELECT * FROM clips WHERE id=?", int(args[0]))
             if not clip or not clip["raw_path"]:
@@ -450,6 +452,19 @@ def _which(arg_cid=None):
     names = "\n".join(f"• `{c['id']}` {c['name']}" for c in running)
     return None, ("Which campaign? Tap **📋 Guide** or **🎬 Footage** on its card in #active-campaigns, "
                   f"or put its id first:\n{names}")
+
+
+def remake_all():
+    """Every clip that isn't live yet is edited again in the current styles and comes back for review."""
+    rows = db.q("""SELECT id FROM clips WHERE raw_path IS NOT NULL AND status IN ('rendered','pending_review','scheduled')
+                   AND id NOT IN (SELECT clip_id FROM posts WHERE status IN ('posted','uploaded','manual'))""")
+    for r in rows:
+        db.x("DELETE FROM posts WHERE clip_id=? AND status='queued'", r["id"])
+        db.x("UPDATE clips SET status='downloaded', style=NULL, error=NULL WHERE id=?", r["id"])
+    if not rows:
+        return "No clips to remake: everything is already live or still being made."
+    return (f"Remaking {len(rows)} clip(s) in the new styles. They come back here for review one by one "
+            "(a few minutes each). Older versions already sent to Telegram can be ignored.")
 
 
 def pasted(cid, text):

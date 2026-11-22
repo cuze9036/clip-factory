@@ -104,11 +104,22 @@ if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
     if ($LASTEXITCODE -ne 0) { throw "Creating the Python environment failed" }
 }
 $vpy = Join-Path $venv "Scripts\python.exe"
-& $vpy -m pip install --upgrade pip --quiet
-& $vpy -m pip install -e $Target --quiet
-if ($LASTEXITCODE -ne 0) { throw "Installing Python packages failed" }
 $cf = Join-Path $venv "Scripts\clipfactory.exe"
-Ok "Packages installed"
+# Code-only updates skip pip: the package is installed in editable mode, so new code is used as soon as it's copied.
+$depsFile = Join-Path $Target "logs\deps-hash.txt"
+$deps = (Get-FileHash -Algorithm SHA256 -InputStream ([IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes(
+    ((Get-Content (Join-Path $Target "pyproject.toml") -Raw) + (Get-Content (Join-Path $Target "requirements.txt") -Raw)))))).Hash
+$oldDeps = if (Test-Path $depsFile) { "$(Get-Content $depsFile -TotalCount 1)".Trim() } else { "" }
+if ($Update -and $deps -eq $oldDeps -and (Test-Path $cf)) {
+    Ok "Packages unchanged, skipped"
+} else {
+    if (-not $Update) { & $vpy -m pip install --upgrade pip --quiet }
+    & $vpy -m pip install -e $Target --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Installing Python packages failed" }
+    New-Item -ItemType Directory -Force -Path (Split-Path $depsFile) | Out-Null
+    Set-Content -Path $depsFile -Value $deps
+    Ok "Packages installed"
+}
 
 # 4. Keys
 Step "4/7 Your keys (press Enter to skip any you don't have yet)"
@@ -257,7 +268,8 @@ Start-ScheduledTask -TaskName $TaskName
 
 # GPU libraries come last, after Clip Factory is already running again, so the bot never waits on this
 # ~1 GB download. They are picked up at the next restart; until then captions run on the CPU.
-if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+$gpuLibs = Test-Path (Join-Path $venv "Lib\site-packages\nvidia\cudnn")
+if ((Get-Command nvidia-smi -ErrorAction SilentlyContinue) -and -not ($Update -and $gpuLibs)) {
     # NVIDIA GPU: libraries that let captions run on the GPU (about 1 GB, downloaded once).
     # Never fatal: without these, captions simply run on the CPU.
     $ErrorActionPreference = "Continue"
@@ -266,8 +278,7 @@ if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     $ErrorActionPreference = "Stop"
     if ($ok) { Ok "GPU libraries for captions installed" } else { Warn "GPU libraries didn't install; captions use the CPU" }
 }
-Start-Sleep -Seconds 8
-if (-not $Update) { Start-Process "http://127.0.0.1:8787/" }
+if (-not $Update) { Start-Sleep -Seconds 8; Start-Process "http://127.0.0.1:8787/" }
 
 Write-Host ""
 Write-Host "Done. Clip Factory is running in the background." -ForegroundColor Green

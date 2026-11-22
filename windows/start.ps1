@@ -1,5 +1,5 @@
 # Runs Clip Factory in the background: waits for internet, starts the dashboard and the pipeline,
-# restarts the pipeline if it stops, and installs updates by itself within about a minute:
+# restarts the pipeline if it stops, and installs updates by itself within about 30 seconds:
 # new commits on GitHub (update.github_repo in config.yaml), or a new Clip Factory zip saved into
 # Desktop\CLIPING TOOL (or Downloads).
 # Task Scheduler runs this at login and when the network connects.
@@ -79,14 +79,25 @@ $Repo = (Select-String -Path (Join-Path $Root "config.yaml") -Pattern '^\s*githu
          Select-Object -First 1).Matches.Groups[1].Value
 $ShaFile = Join-Path $Logs "last-sha.txt"
 $script:Etag = $null
+$script:GhPauseUntil = [DateTime]::MinValue
 
 function Latest-Sha {
     # A conditional request: "nothing new" (304) doesn't count against GitHub's hourly limit.
     $headers = @{ "Accept" = "application/vnd.github.sha"; "User-Agent" = "clip-factory-updater" }
     if ($script:Etag) { $headers["If-None-Match"] = $script:Etag }
+    if ((Get-Date) -lt $script:GhPauseUntil) { return $null }
     try {
-        $r = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/$Repo/commits/main" -Headers $headers -TimeoutSec 20
-    } catch { return $null }
+        $r = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/$Repo/commits/main" -Headers $headers -TimeoutSec 8
+    } catch {
+        # 304 = nothing new (Windows PowerShell reports it as an error). 403/429 = GitHub's hourly limit: wait 10 min.
+        $code = 0
+        try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+        if ($code -eq 403 -or $code -eq 429) {
+            $script:GhPauseUntil = (Get-Date).AddMinutes(10)
+            Log "GitHub asked to slow down; checking again in 10 minutes"
+        }
+        return $null
+    }
     $script:Etag = $r.Headers["ETag"]
     $body = $r.Content
     if ($body -is [byte[]]) { $body = [Text.Encoding]::ASCII.GetString($body) }
@@ -138,13 +149,11 @@ try {
         $p = Start-Process -FilePath $Cf -ArgumentList "run" -WorkingDirectory $Root -WindowStyle Hidden `
             -RedirectStandardOutput (Join-Path $Logs "clipfactory-$stamp.log") `
             -RedirectStandardError (Join-Path $Logs "clipfactory-$stamp-errors.log") -PassThru
-        $tick = 0
         while (-not $p.HasExited) {
-            Start-Sleep -Seconds 20
+            Start-Sleep -Seconds 10
             if ($dash.HasExited) { $dash = Start-Dashboard }
             try { Check-Update } catch { Log "Update check failed: $_" }
-            $tick++
-            if ($tick % 3 -eq 0) { try { Check-GitHub } catch { Log "GitHub check failed: $_" } }   # about once a minute
+            try { Check-GitHub } catch { Log "GitHub check failed: $_" }   # every 10 s; "nothing new" is free
         }
         Log "Pipeline stopped (exit code $($p.ExitCode)); restarting in 30 seconds"
         Get-ChildItem $Logs -Filter "clipfactory-*.log" | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-14) } |

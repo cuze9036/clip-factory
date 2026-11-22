@@ -21,6 +21,7 @@ AWAIT_KEY = "awaiting_brief"
 AWAIT_MINUTES = 60
 FEED_HINTS = re.compile(r"(\$\s?\d|\bcpm\b|per\s*1\s*k\b|per\s*1,?000|/\s*1k\b|\brewards?\b|\bcampaign\b)", re.I)
 DRIVE = re.compile(r"https?://drive\.google\.com/\S+", re.I)
+DROPBOX = re.compile(r"https?://(?:www\.)?dropbox\.com/(?:scl/f[io]|sh|s)/\S+", re.I)
 
 
 # ---------- which campaigns are live ----------
@@ -198,7 +199,20 @@ def apply_brief(cid, text):
             added.append(campaigns.add_source(cid, line))
         except (ValueError, SystemExit, Exception) as e:
             problems.append(f"{line[:80]} ({str(e)[:80]})")
+    for link in sorted(set(m.group(0).rstrip(').,') for m in DROPBOX.finditer(text))):
+        if not db.one("SELECT 1 FROM sources WHERE campaign_id=? AND channel_id=?", cid, link):
+            try:
+                added.append(campaigns.add_source(cid, link))
+            except (ValueError, Exception) as e:
+                problems.append(f"{link[:80]} ({str(e)[:80]})")
     drive = sorted(set(m.group(0).rstrip(').,') for m in DRIVE.finditer(text)))
+    try:   # the page's instructions become the campaign guide the AI follows
+        from . import guide
+        guide.add(cid, text)
+        g = guide.get(campaigns.get(cid))
+        added.append(f"Guide saved: {len(g['do'])} things to do, {len(g['avoid'])} to avoid (see `!guide {cid}`)")
+    except Exception as e:
+        db.log(cid, f"Couldn't make a guide from the page: {str(e)[:150]}", "warn")
     db.kv_set(AWAIT_KEY, None)
 
     c = campaigns.get(cid)

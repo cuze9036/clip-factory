@@ -5,7 +5,10 @@ timezone: America/New_York        # posting slots are US Eastern time
 watcher:
   every_minutes: 15               # how often to check sources for new uploads and ended streams
   lookback_days: 3                # ignore videos older than this
-  min_duration_s: 120             # skip anything shorter (already a short)
+  min_duration_s: 120             # skip YouTube/Twitch videos shorter than this (already a short)
+  min_file_duration_s: 15         # campaign footage (folders, Dropbox) can be short; skip only tiny files
+  dropbox_every_hours: 6          # re-download a Dropbox share link this often to pick up new files
+  dropbox_max_gb: 20
 
 moments:
   english_only: true              # skip videos whose speech isn't English (campaigns target US viewers)

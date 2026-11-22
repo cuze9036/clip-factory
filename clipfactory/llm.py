@@ -217,7 +217,9 @@ American English only."""
 
 
 def rules_block(campaign):
-    rules = campaign.get("rules") or []
+    """The campaign's rules plus its guide (reference material), for every AI prompt about this campaign."""
+    from . import guide
+    rules = list(campaign.get("rules") or []) + guide.lines(campaign)
     if not rules:
         return ""
-    return "\n\nCampaign rules from the creator (follow them):\n" + "\n".join(f"- {r}" for r in rules)
+    return "\n\nCampaign rules and guide from the creator (follow them):\n" + "\n".join(f"- {r}" for r in rules)

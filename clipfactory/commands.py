@@ -10,6 +10,7 @@ HELP = """**Clip Factory commands**
 `!todo` clips to post yourself and links to submit · `!posted <post> <link>` · `!submitted <post>`
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
+`!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -30,6 +31,7 @@ SLASH = {
     "posted": ("You posted a clip yourself", "post number and the link"),
     "submitted": ("You submitted a post on the campaign page", "post number"),
     "suggested": ("All campaigns the finder found", None),
+    "guide": ("The campaign's guide the AI follows; add reference material", "campaign number/id, then pasted instructions (optional)"),
     "board": ("Refresh #campaign-updates and #active-campaigns now", None),
     "activate": ("Start a campaign's lane", "campaign number or id"),
     "ignore": ("Hide a campaign", "campaign number or id"),
@@ -335,6 +337,15 @@ def handle(text):
             for k in ("live", "running"):
                 db.kv_set(f"board_last_full:{k}", None)
             return "Refreshing #campaign-updates and #active-campaigns (about a minute)."
+        if cmd == "!guide":
+            from . import guide, joinflow
+            cid = _resolve(args[0]) if args else ""
+            text = rest.partition(" ")[2] if args and campaigns.get(cid) else rest
+            if not campaigns.get(cid):
+                cid = joinflow.awaiting() or joinflow.last_joined()
+            if not cid:
+                return "Which campaign? Send `!guide <campaign number or id> <instructions>`."
+            return guide.add(cid, text) if len(text.strip()) >= 20 else guide.show(cid)
         if cmd == "!emails":
             from . import gmail_watch
             return gmail_watch.emails_command()

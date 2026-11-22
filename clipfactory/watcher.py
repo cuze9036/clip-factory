@@ -2,11 +2,16 @@
 import datetime as dt
 import hashlib
 import pathlib
+import re
+import zipfile
+
+import requests
 
 from . import campaigns, config, db, youtube_api
 from .util import ffprobe, iso, iso_duration, parse_iso, utcnow, youtube_id
 
 VIDEO_EXT = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
+REFERENCE_EXT = {".pdf", ".txt", ".md", ".docx", ".doc", ".png", ".jpg", ".jpeg"}
 
 
 def _insert(c, s, vid, title, url=None, local_path=None, is_stream=0, duration=None, published=None, status="new",
@@ -68,6 +73,108 @@ def _twitch(c, s, cutoff, min_dur):
     return found
 
 
+def dropbox_direct(url):
+    """A Dropbox share link that downloads instead of showing a web page (dl=1). Keeps rlkey and other params."""
+    url = url.strip().strip("<>")
+    if re.search(r"[?&]dl=\d", url):
+        return re.sub(r"([?&])dl=\d", r"\1dl=1", url)
+    return url + ("&" if "?" in url else "?") + "dl=1"
+
+
+def _safe_target(root, name):
+    """Where a file from the zip goes, or None if its path tries to leave the folder."""
+    parts = [p for p in pathlib.PurePosixPath(name.replace("\\", "/")).parts if p not in ("", ".", "/")]
+    if not parts or ".." in parts:
+        return None
+    target = root.joinpath(*parts).resolve()
+    return target if str(target).startswith(str(root.resolve())) else None
+
+
+def dropbox_download(url, root):
+    """Download a Dropbox shared folder (as one zip) or file into `root`; keeps files already there.
+    No Dropbox account or app is needed. Returns (new videos, new reference files)."""
+    root.mkdir(parents=True, exist_ok=True)
+    limit = config.section("watcher").get("dropbox_max_gb", 20) * 1024 ** 3
+    tmp = root / ".download.part"
+    with requests.get(dropbox_direct(url), stream=True, timeout=(20, 600), allow_redirects=True) as r:
+        if r.status_code != 200:
+            raise RuntimeError(f"Dropbox answered HTTP {r.status_code}; is the link still shared?")
+        ctype = r.headers.get("content-type", "")
+        if "text/html" in ctype:
+            raise RuntimeError("Dropbox showed a web page instead of the files (the folder may be too big to "
+                               "download at once, or the link needs a password)")
+        name = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)', r.headers.get("content-disposition", ""))
+        name = requests.utils.unquote(name.group(1)) if name else "download"
+        size = 0
+        with open(tmp, "wb") as f:
+            for chunk in r.iter_content(1024 * 1024):
+                size += len(chunk)
+                if size > limit:
+                    raise RuntimeError("Dropbox folder is bigger than watcher.dropbox_max_gb")
+                f.write(chunk)
+    videos, refs = [], []
+    try:
+        if zipfile.is_zipfile(tmp):
+            with zipfile.ZipFile(tmp) as z:
+                for info in z.infolist():
+                    ext = pathlib.PurePosixPath(info.filename).suffix.lower()
+                    if info.is_dir() or ext not in VIDEO_EXT | REFERENCE_EXT:
+                        continue
+                    target = _safe_target(root, info.filename)
+                    if not target or (target.exists() and target.stat().st_size == info.file_size):
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with z.open(info) as src, open(target, "wb") as dst:
+                        while True:
+                            block = src.read(1024 * 1024)
+                            if not block:
+                                break
+                            dst.write(block)
+                    (videos if ext in VIDEO_EXT else refs).append(target)
+        else:   # a single shared file
+            target = _safe_target(root, name)
+            if target and pathlib.Path(name).suffix.lower() in VIDEO_EXT | REFERENCE_EXT and not target.exists():
+                tmp.replace(target)
+                (videos if target.suffix.lower() in VIDEO_EXT else refs).append(target)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return videos, refs
+
+
+def _dropbox(c, s, min_dur):
+    """A Dropbox share link from the campaign: download it every few hours, then treat it like a folder."""
+    root = config.data_dir() / "dropbox" / hashlib.sha1(s["channel_id"].encode()).hexdigest()[:12]
+    key = f"dropbox_last:{s['id']}"
+    last = db.kv_get(key)
+    every = dt.timedelta(hours=config.section("watcher").get("dropbox_every_hours", 6))
+    if not last or utcnow() - parse_iso(last) >= every or not root.exists():
+        db.kv_set(key, iso(utcnow()))
+        videos, refs = dropbox_download(s["channel_id"], root)
+        if videos or refs:
+            db.log(c["id"], f"Dropbox: {len(videos)} new video(s), {len(refs)} reference file(s)")
+        _reference_files(c, refs)
+    return _folder(c, {**s, "channel_id": str(root)}, min_dur)
+
+
+def _reference_files(c, refs):
+    """Text guides become part of the campaign guide; other files (PDF, images) are listed on Discord."""
+    if not refs:
+        return
+    from . import guide, notify
+    texts = [r for r in refs if r.suffix.lower() in (".txt", ".md")]
+    for r in texts:
+        try:
+            guide.add(c["id"], r.read_text(encoding="utf-8", errors="replace"))
+        except Exception as e:
+            db.log(c["id"], f"Couldn't read {r.name}: {e}", "warn")
+    others = [r for r in refs if r not in texts]
+    if others:
+        notify.send("progress", f"**{c['name']}**: reference files in the Dropbox folder: "
+                    + ", ".join(r.name for r in others[:8])
+                    + f"\nOpen them (Clipping Tools\\data\\dropbox) and paste their instructions with "
+                    f"`!guide {c['id']} <text>` so the AI follows them.", campaign_id=c["id"])
+
+
 def _folder(c, s, min_dur):
     """A folder of raw files from the campaign, e.g. a synced Google Drive or Dropbox folder.
     A file waits until its size stops changing, so half-synced files are never clipped."""
@@ -109,7 +216,9 @@ def check_sources():
                 if s["kind"] == "twitch_channel":
                     found += _twitch(c, s, cutoff, min_dur)
                 elif s["kind"] == "folder":
-                    found += _folder(c, s, min_dur)
+                    found += _folder(c, s, cfg.get("min_file_duration_s", 15))
+                elif s["kind"] == "dropbox":
+                    found += _dropbox(c, s, cfg.get("min_file_duration_s", 15))
                 else:
                     found += _youtube(c, s, cutoff, min_dur)
                 db.x("UPDATE sources SET last_checked=? WHERE id=?", iso(utcnow()), s["id"])

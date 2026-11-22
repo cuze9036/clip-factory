@@ -98,6 +98,8 @@ def parse_source(line):
         return None
     if re.match(r"^(/|~|[A-Za-z]:[\\/])", line):
         return "folder", line
+    if re.search(r"dropbox\.com/(scl/f[io]|sh|s)/", line):
+        return "dropbox", line.strip().strip("<>")
     m = re.search(r"youtube\.com/channel/(UC[\w-]{22})", line) or re.fullmatch(r"(UC[\w-]{22})", line)
     if m:
         return "youtube_channel", m.group(1)
@@ -109,8 +111,8 @@ def parse_source(line):
     m = re.search(r"twitch\.tv/([A-Za-z0-9_]+)/?$", line)
     if m:
         return "twitch_channel", m.group(1).lower()
-    raise ValueError(f"Can't use this source: {line}. Use a YouTube channel, a Twitch channel, a video link "
-                     "or a folder path.")
+    raise ValueError(f"Can't use this source: {line}. Use a YouTube channel, a Twitch channel, a video link, "
+                     "a Dropbox link or a folder path.")
 
 
 def set_sources(campaign_id, items, default_layout="blur"):
@@ -144,7 +146,11 @@ def add_source(campaign_id, line):
     db.x("""INSERT INTO sources(campaign_id, kind, name, channel_id, streams_only, layout) VALUES(?,?,?,?,?,?)
             ON CONFLICT(campaign_id, channel_id) DO NOTHING""",
          campaign_id, kind, ident, ident, int(kind == "twitch_channel"), layout)
-    what = {"youtube_channel": "YouTube channel", "twitch_channel": "Twitch channel", "folder": "folder"}[kind]
+    what = {"youtube_channel": "YouTube channel", "twitch_channel": "Twitch channel", "folder": "folder",
+            "dropbox": "Dropbox link"}[kind]
+    if kind == "dropbox":
+        return ("Added the Dropbox link. Its videos are downloaded (no Dropbox account or app needed) and clipped; "
+                "new files in it are picked up every few hours.")
     return f"Added {what} `{ident}`. New streams/files there will be clipped."
 
 

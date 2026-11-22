@@ -4,7 +4,7 @@ Owner writes Hindi/Hinglish: reply in simple Hindi, commands in English. Everyth
 
 ## What it is
 Python tool in this folder that earns from Whop clipping campaigns (paid per 1K views) and runs the owner's GTA 6 channel. Each campaign is a lane (sources, rules, budget, quota).
-Flow: `discovery.py` (Apify listings every 6 h + #campaign-feed → suggested campaigns → `board.py` cards) → `watcher.py` (YouTube/Twitch/folder) → `moments.py` (Gemini watches YouTube; else transcript + `llm.py` router) → `download.py` → `render.py` (1080x1920, captions) → `metadata.py` → `review.py` (score ≥ 9 auto-approves) → `schedule.py` (US Eastern slots) → `publish.py` (API where keys exist; else video + caption to Telegram/Discord for the owner to post) → `analytics.py`.
+Flow: `discovery.py` (Apify listings every 6 h + #campaign-feed → suggested campaigns → `board.py` cards) → `watcher.py` (YouTube/Twitch/folder/Dropbox share links, no Dropbox account) → `moments.py` (Gemini watches YouTube; else transcript + `llm.py` router) → `download.py` → `render.py` (1080x1920, captions) → `metadata.py` → `review.py` (score ≥ 9 auto-approves) → `schedule.py` (US Eastern slots) → `publish.py` (API where keys exist; else video + caption to Telegram/Discord for the owner to post) → `analytics.py`.
 
 ## Where things happen (keep it this way)
 - Discord (`discord_bot.py`, `commands.py`): all control, alerts, buttons, commands.
@@ -23,6 +23,7 @@ Flow: `discovery.py` (Apify listings every 6 h + #campaign-feed → suggested ca
 Working: Discord (slash commands, buttons), Telegram hand-off, Gemini + FreeLLMAPI, YouTube login, Apify finder, Gmail audit watcher (read-only), GPU (captions + NVENC), auto-update via GitHub, offline alert (healthchecks.io, HEARTBEAT_URL set), Meta keys set (Instagram + Facebook post by themselves). Selftest all OK; it also checks the Instagram/Facebook keys ("Instagram posting", "Facebook posting").
 Join flow: #campaign-updates card → Open campaign → join on Whop (owner) → I joined → paste the page → lane starts, card moves to #active-campaigns.
 Posting: YouTube = owner posts via Telegram until Google's API audit passes (`always_manual: [youtube]`; audit submitted 2026-11-22). Instagram + Facebook = Meta Graph API once keys are set (IG_MAIN_USER_ID, IG_MAIN_TOKEN, FB_MAIN_PAGE_ID, FB_MAIN_PAGE_TOKEN), else Telegram. TikTok + X = Telegram, owner posts. X API (credits + keys X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_SECRET) is for later; nothing to do now. No screen/remote-desktop automation of any platform.
+Campaign guide (`guide.py`, `!guide`): the pasted page and reference material become do/avoid lines in every AI prompt.
 Paid campaigns: #Sponsored (or the campaign's #<Brand>Ad) on the first line of every caption; YouTube paid-promotion flag.
 Keys go in with `windows\set-key.ps1 <NAME>` (hidden input), never in chat.
 Next: join the first campaign from #campaign-updates (owner joins on Whop). Later: X API, TikTok API.

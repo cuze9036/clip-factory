@@ -58,11 +58,13 @@ def pick_style(c, m, layout, face, clip):
     fixed = config.section("render").get("style", "auto")
     if fixed in ("framed", "legacy"):
         return None
-    avoid = db.kv_get(f"restyle:{clip['id']}")   # a re-edit asked for a different style
-    if avoid:
-        db.kv_set(f"restyle:{clip['id']}", None)
-    return styles.choose(c["topic"], m["category"] or "", facecam=bool(layout == "facecam_split" and face),
-                         avoid=avoid)
+    db.kv_set(f"restyle:{clip['id']}", None)
+    key = f"styles_used:{m['id']}"   # every remake / re-edit of this moment gets a style it hasn't had yet
+    used = db.kv_get(key) or []
+    style = styles.choose(c["topic"], m["category"] or "", facecam=bool(layout == "facecam_split" and face),
+                          avoid=used)
+    db.kv_set(key, (used + [style])[-5:])
+    return style
 
 
 def stage_render(c, limit=1):

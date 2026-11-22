@@ -68,25 +68,34 @@ def accent_for(topic, category=""):
     return ACCENTS["yellow"]
 
 
+LABELS = {"bold_crop": "Bold captions, full screen", "word_pop": "One big word at a time",
+          "blur_box": "Blurred background + title box", "black_title": "Black background + top title",
+          "meme_top": "White meme title on top", "split": "Facecam on top, content below"}
+
+
 def choose(topic, category="", facecam=False, avoid=None, rng=random):
-    """A style that fits the content, with some variety (weights from the research)."""
-    if facecam:
+    """A style that fits the content, with variety. `avoid` = styles this clip already had (a list), so every
+    remake or re-edit looks clearly different until all styles were tried."""
+    avoid = set([avoid] if isinstance(avoid, str) else (avoid or []))
+    if facecam and "split" not in avoid:
         return "split"
     options = {"bold_crop": 5, "meme_top": 2, "blur_box": 2, "black_title": 1}
     for text in (topic or "", category or ""):   # the campaign's topic decides first, the moment type second
         if TALK.search(text):
-            options = {"bold_crop": 6, "word_pop": 2, "black_title": 2}
+            options = {"bold_crop": 5, "word_pop": 3, "black_title": 2, "blur_box": 1}
         elif WIDE.search(text):
-            options = {"blur_box": 5, "black_title": 3, "word_pop": 2}
+            options = {"blur_box": 4, "black_title": 3, "word_pop": 2, "bold_crop": 1}
         elif SHOW.search(text):
-            options = {"meme_top": 5, "bold_crop": 4, "word_pop": 1}
+            options = {"bold_crop": 3, "meme_top": 3, "word_pop": 2, "blur_box": 2, "black_title": 1}
         else:
             continue
         break
     fixed = (config.section("render").get("style") or "auto")
-    if fixed != "auto" and fixed in STYLE_NAMES:
+    if fixed != "auto" and fixed in STYLE_NAMES and fixed not in avoid:
         return fixed
-    options = {k: v for k, v in options.items() if k != avoid} or options
+    options = {k: v for k, v in options.items() if k not in avoid}
+    if not options:   # every fitting style was tried: any other style, then start over
+        options = {k: 1 for k in STYLE_NAMES if k != "split" and k not in avoid} or {"bold_crop": 1}
     names, weights = zip(*options.items())
     return rng.choices(names, weights)[0]
 

@@ -81,10 +81,24 @@ class ReeditTest(unittest.TestCase):
              k, cid, "instagram", "main", "posted")
         self.assertIn("already live", commands.button(f"ed:{k}:later"))
 
+    def test_approve_says_where_and_when_and_queue_lists_it(self):
+        from clipfactory import commands, db
+        cid, _, k = self._clip()
+        db.x("UPDATE clips SET style='meme_top' WHERE id=?", k)
+        with __import__("unittest.mock").mock.patch("clipfactory.publish.platform_ready", return_value=True), \
+                __import__("unittest.mock").mock.patch("clipfactory.publish.mode", return_value="auto"):
+            out = commands.approve(k)
+        self.assertIn("approved. It goes out:", out)
+        self.assertIn("• Instagram:", out)
+        self.assertIn("posts by itself", out)
+        self.assertIn(f"clip #{k}", commands.handle("/queue"))
+
     def test_review_card_has_reedit_button(self):
         from clipfactory import db, review
         _, _, k = self._clip()
+        db.x("UPDATE clips SET style='blur_box' WHERE id=?", k)
         review.notify(k)
+        self.assertIn("Style: Blurred background + title box", db.q("SELECT text FROM outbox")[-1]["text"])
         btn = json.loads(db.q("SELECT buttons FROM outbox")[-1]["buttons"])
         self.assertIn(["🔁 Re-edit", f"re:{k}", "grey"], btn)
 

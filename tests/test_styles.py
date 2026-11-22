@@ -22,7 +22,7 @@ class StylesTest(unittest.TestCase):
         from clipfactory import styles
         rng = random.Random(1)
         talk = {styles.choose("business podcast", "insight", rng=rng) for _ in range(40)}
-        self.assertTrue(talk <= {"bold_crop", "word_pop", "black_title"})
+        self.assertTrue(talk <= {"bold_crop", "word_pop", "black_title", "blur_box"})
         self.assertIn("bold_crop", talk)
         show = {styles.choose("live concert", "funny", rng=rng) for _ in range(40)}
         self.assertIn("meme_top", show)
@@ -31,6 +31,15 @@ class StylesTest(unittest.TestCase):
         self.assertEqual(styles.choose("streamer", "", facecam=True), "split")
         for _ in range(20):
             self.assertNotEqual(styles.choose("podcast", "", avoid="bold_crop", rng=rng), "bold_crop")
+
+    def test_every_remake_of_a_clip_gets_a_new_style(self):
+        from clipfactory import campaigns, db, pipeline
+        db._local.__dict__.clear()
+        cid = campaigns.suggest({"name": "Band Live", "platforms": ["instagram"], "rate_per_1k": 2,
+                                 "topic": "live concert"}, "pasted")
+        m = {"id": 1, "category": "funny"}
+        seen = [pipeline.pick_style(campaigns.get(cid), m, "blur", None, {"id": 9}) for _ in range(5)]
+        self.assertEqual(len(set(seen)), 5, seen)                  # 5 remakes, 5 different designs
 
     def test_short_credit_and_clean_title(self):
         from clipfactory import styles

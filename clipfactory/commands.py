@@ -3,7 +3,7 @@ import datetime as dt
 import re
 
 from . import campaigns, db, notify, review, watcher
-from .util import ET, iso, parse_iso, utcnow
+from .util import iso, parse_iso, utcnow
 
 HELP = """**Clip Factory commands**
 `!status` every lane's numbers
@@ -12,7 +12,7 @@ HELP = """**Clip Factory commands**
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
-`!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
+`!queue` what goes out next, where and when · `!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -43,6 +43,7 @@ SLASH = {
     "add": ("Clip one video", "video link, then campaign id"),
     "find": ("Look for new campaigns now", None),
     "ai": ("Which AI did the work today (free models vs Gemini)", None),
+    "queue": ("What goes out next: where, when, and who posts it", None),
     "reedit": ("Make a clip again your way", "clip number, then what to change (optional)"),
     "remake": ("Edit a clip again in the current style, or all of them", "clip number, or: all"),
     "fix": ("Fix what it can right now (retries, Telegram fallback) and explain errors", None),
@@ -210,7 +211,23 @@ def approve(clip_id, title_no=1):
     when = review.approve(clip_id, max(0, title_no - 1))
     if not when:
         return f"Clip #{clip_id} isn't waiting for review."
-    return f"Clip #{clip_id} approved. Goes live {when.astimezone(ET):%a %b %d, %I:%M %p} ET."
+    return f"✅ Clip #{clip_id} approved. It goes out:\n{review.plan_text(clip_id)}"
+
+
+def queue():
+    """Every approved clip that hasn't gone out yet: where, when, and who posts it."""
+    from .publish import name, when_text
+    rows = db.q("""SELECT p.*, k.title FROM posts p JOIN clips k ON k.id=p.clip_id
+                   WHERE p.status IN ('queued','manual','uploaded') ORDER BY p.scheduled_at LIMIT 25""")
+    if not rows:
+        return "Nothing waiting to go out. Approved clips show up here with their times."
+    from . import config
+    always = config.get().get("always_manual") or []
+    return "**Coming up**\n" + "\n".join(
+        f"• {when_text(p)} · {name(p['platform'])} · clip #{p['clip_id']} {p['title'][:40]} · "
+        + ("by itself" if p.get("mode") == "auto" and p["platform"] not in always else "you post")
+        for p in rows)
+
 
 
 def reject(clip_id, reason="rejected on Discord"):
@@ -348,6 +365,8 @@ def handle(text):
             from . import discovery
             cid, ok = discovery.add_from_text(rest, origin="pasted")
             return None  # the suggestion message with buttons comes from the outbox
+        if cmd == "!queue":
+            return queue()
         if cmd == "!remake" and args and args[0].lower() == "all":
             return remake_all()
         if cmd == "!remake":

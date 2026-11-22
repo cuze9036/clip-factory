@@ -3,7 +3,7 @@ import json
 
 
 from . import db, notify as outbox, schedule
-from .util import ET, iso, utcnow
+from .util import iso, utcnow
 
 
 def approve(clip_id, title_index=0, title_override=None):
@@ -26,6 +26,25 @@ def reject(clip_id, reason="not good enough"):
 
 
 
+def _style(clip):
+    from .styles import LABELS
+    return f"\nStyle: {LABELS.get(clip.get('style') or '', 'older look')}" if clip.get("style") is not None else ""
+
+
+def plan_text(clip_id):
+    """Where and when an approved clip goes out, platform by platform."""
+    from .publish import name, when_text
+    rows = db.q("SELECT * FROM posts WHERE clip_id=? AND status IN ('queued','manual','uploaded') ORDER BY scheduled_at",
+                clip_id)
+    if not rows:
+        return "Not scheduled anywhere yet."
+    from . import config
+    always = config.get().get("always_manual") or []
+    return "\n".join(f"• {name(p['platform'])}: {when_text(p)} · "
+                     + ("posts by itself" if p.get("mode") == "auto" and p["platform"] not in always
+                        else "you post it (video comes to Telegram)") for p in rows)
+
+
 def _clip(clip_id):
     return db.one("""SELECT c.*, m.hook, m.score, m.category, k.name campaign FROM clips c
                      JOIN moments m ON m.id=c.moment_id JOIN campaigns k ON k.id=c.campaign_id WHERE c.id=?""", clip_id)
@@ -34,7 +53,8 @@ def _clip(clip_id):
 def notify(clip_id):
     clip = _clip(clip_id)
     titles = json.loads(clip["titles"] or "[]")
-    outbox.send("review", f"Clip #{clip_id} ready · {clip['campaign']} · {clip['score']:.0f}/10 {clip['category']}\n"
+    outbox.send("review", f"Clip #{clip_id} ready · {clip['campaign']} · {clip['score']:.0f}/10 {clip['category']}"
+                + _style(clip) + "\n"
                 + "\n".join(f"{i + 1}. {t}" for i, t in enumerate(titles))
                 + f"\nType `!approve {clip_id} 2` to pick title 2, or tap a button.",
                 campaign_id=clip["campaign_id"], clip_id=clip_id, file_path=clip["final_path"],
@@ -46,8 +66,8 @@ def auto_approve(clip_id):
     clip = _clip(clip_id)
     when = approve(clip_id, 0)
     if when:
-        outbox.send("auto", f"Auto-posting clip #{clip_id} ({clip['score']:.0f}/10) · {clip['campaign']}\n"
-                    f"{clip['title']}\nGoes live {when.astimezone(ET):%a %b %d, %I:%M %p} ET. Tap Cancel to stop it.",
+        outbox.send("auto", f"✅ Auto-approved clip #{clip_id} ({clip['score']:.0f}/10) · {clip['campaign']}{_style(clip)}\n"
+                    f"{clip['title']}\n{plan_text(clip_id)}\nTap Cancel to stop it, or Re-edit to change it.",
                     campaign_id=clip["campaign_id"], clip_id=clip_id, file_path=clip["final_path"],
                     buttons=[["🔁 Re-edit", f"re:{clip_id}", "grey"], ["Cancel", f"x:{clip_id}", "red"]])
     return when

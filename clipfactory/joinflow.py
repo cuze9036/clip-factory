@@ -135,6 +135,39 @@ def awaiting():
     return a["cid"]
 
 
+def last_joined():
+    """The campaign you most recently tapped "I joined" on, or None."""
+    best = None
+    for c in campaigns.all_campaigns():
+        j = campaigns._extra(c).get("joined_at")
+        if j and (not best or j > best[0]):
+            best = (j, c["id"])
+    return best[1] if best else None
+
+
+def add_link(cid, line):
+    """A link or folder for a campaign you joined: add it as footage and start the lane. Returns a reply."""
+    c = campaigns.get(cid)
+    line = line.strip().strip("<>")
+    if "whop.com" in line:
+        return (f"That's the campaign page on Whop. I can't log in there, so open it, press **Ctrl+A**, **Ctrl+C** "
+                f"and paste the text here. Or send the creator's YouTube/Twitch channel: `!source {cid} <link>`.")
+    if DRIVE.match(line):
+        return ("That's a Google Drive folder. Sync it with Google Drive for Desktop, then send "
+                f"`!source {cid} \"G:\\My Drive\\<folder name>\"`.")
+    try:
+        reply = campaigns.add_source(cid, line)
+    except ValueError as e:
+        return f"{e}"
+    if c and c.get("stage") == "suggested" and campaigns._extra(c).get("joined_at"):
+        campaigns.activate(cid)
+        db.kv_set(AWAIT_KEY, None)
+        reply += f"\n**{c['name']} is running.** Clips will show up here for review."
+    elif c and c.get("stage") == "suggested":
+        reply += f"\nWhen you've joined it on Whop, start it with `!activate {cid}`."
+    return reply
+
+
 def apply_brief(cid, text):
     """Read the pasted campaign page into an existing campaign, add its footage and start the lane."""
     c = campaigns.get(cid)

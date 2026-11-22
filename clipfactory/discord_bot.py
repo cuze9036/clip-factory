@@ -252,7 +252,7 @@ class Bot(discord.Client):
         if not text.startswith(("!", "/")):
             from . import joinflow
             cid = await asyncio.to_thread(joinflow.awaiting)
-            if not cid or len(text) < 80:
+            if not cid or (len(text) < 80 and not text.startswith(("http", "<http", "@")) and ":\\" not in text):
                 return
             async with message.channel.typing():   # the pasted campaign page after "I joined"
                 reply = await asyncio.to_thread(commands.brief, cid, text)

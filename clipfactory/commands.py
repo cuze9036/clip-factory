@@ -243,7 +243,7 @@ def handle(text):
             return campaign_list()
         if cmd == "!suggested":
             return suggested()
-        if args and cmd in ("!raw", "!activate", "!ignore", "!source"):
+        if args and cmd in ("!raw", "!activate", "!ignore", "!source", "!pause", "!resume"):
             args[0] = _resolve(args[0])
         if cmd == "!raw":
             c = campaigns.get(args[0])
@@ -280,9 +280,18 @@ def handle(text):
             publish.mark_posted(post["id"], args[1])
             return f"Post {args[0]} marked live."
         if cmd == "!source":
-            if not campaigns.get(args[0]):
-                return f"No campaign `{args[0]}`."
-            return campaigns.add_source(args[0], " ".join(args[1:]))
+            from . import joinflow
+            if not args:
+                return "Send `!source <campaign number> <YouTube/Twitch channel, video link or folder>`."
+            cid = _resolve(args[0])
+            if campaigns.get(cid) and len(args) > 1:
+                return joinflow.add_link(cid, " ".join(args[1:]))
+            # Just a link: use the campaign you joined last.
+            cid = joinflow.awaiting() or joinflow.last_joined()
+            if not cid:
+                return ("Which campaign? Tap **I joined** on its card first, or send "
+                        "`!source <number from !suggested> <link>`.")
+            return joinflow.add_link(cid, rest)
         if cmd == "!add":
             vid = watcher.add_video(args[0], args[1])
             return f"Added `{vid}` to `{args[1]}`. The AI will look for moments on the next pass."
@@ -345,8 +354,10 @@ def handle(text):
 
 
 def brief(cid, text):
-    """The campaign page pasted after tapping "I joined"."""
+    """The campaign page (or a footage link) pasted after tapping "I joined"."""
     from . import joinflow
+    if len(text) < 300 and re.fullmatch(r"\s*<?(https?://\S+|[A-Za-z]:\\.+|@[\w.-]+)>?\s*", text):
+        return joinflow.add_link(cid, text)
     try:
         return joinflow.apply_brief(cid, text)
     except Exception as e:

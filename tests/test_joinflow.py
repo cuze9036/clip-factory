@@ -88,6 +88,37 @@ class JoinFlowTest(unittest.TestCase):
         self.assertIn("Band Live Clipping", out)
         self.assertEqual(len([c for c in campaigns.all_campaigns()]), 1)   # no duplicate created
 
+    def test_source_with_just_a_link_uses_the_joined_campaign(self):
+        from clipfactory import campaigns, commands, joinflow
+        cid = self._found("Band Live Clipping")
+        commands.button(f"join:{cid}")
+        out = commands.handle("/source https://whop.com/band/clips/")
+        self.assertIn("Ctrl+A", out)                                  # a Whop link: paste the page instead
+        out = commands.handle("! source https://www.youtube.com/@BandOfficial")
+        self.assertIn("is running", out)
+        self.assertEqual(campaigns.get(cid)["stage"], "active")
+        self.assertEqual(campaigns.sources(cid)[0]["channel_id"], "@BandOfficial")
+        self.assertIsNone(joinflow.awaiting())
+
+    def test_source_with_a_number_from_the_list(self):
+        from clipfactory import campaigns, commands
+        a = self._found("Alpha Clipping")
+        self._found("Beta Clipping")
+        commands.handle("!suggested")
+        out = commands.handle("!source 1 @AlphaChannel")
+        self.assertIn("!activate", out)                                # not joined yet: tells how to start
+        self.assertEqual(campaigns.sources(a)[0]["channel_id"], "@AlphaChannel")
+
+    def test_bare_link_pasted_after_joining(self):
+        from clipfactory import campaigns, commands
+        cid = self._found("Band Live Clipping")
+        commands.button(f"join:{cid}")
+        out = commands.brief(cid, "https://www.twitch.tv/bandlive")
+        self.assertIn("is running", out)
+        self.assertEqual(campaigns.sources(cid)[0]["channel_id"], "bandlive")
+        out = commands.brief(cid, "https://drive.google.com/drive/folders/abc")
+        self.assertIn("Google Drive for Desktop", out)
+
     def test_feed_post_becomes_a_live_suggestion_once(self):
         from clipfactory import campaigns, db, joinflow
         db.x("DELETE FROM outbox")

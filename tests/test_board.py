@@ -99,7 +99,9 @@ class BoardTest(unittest.TestCase):
         active, _ = self._plan(kind="running")
         self.assertEqual([i["key"] for i in active], [f"running:c:{run}", "running:summary"])
         self.assertTrue(active[0]["text"].startswith("**▶ RUNNING**"))
-        self.assertEqual(active[0]["buttons"], [])
+        self.assertEqual([b[1] for b in active[0]["buttons"]], [f"guide:{run}", f"src:{run}", f"pause:{run}"])
+        self.assertIn("Guide: none yet", active[0]["text"])
+        self.assertIn(f"id `{run}`", active[0]["text"])
         self.assertIn("1 running", active[1]["text"])
 
     def test_template_lanes_without_videos_are_not_shown(self):

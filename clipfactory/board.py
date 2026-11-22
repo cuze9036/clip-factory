@@ -124,14 +124,23 @@ def card(c, t, eff):
             nums.append(f"~{_money(c['budget_left'] / clippers)} each")
     if c["max_payout_per_clip"]:
         nums.append(f"max {_money(c['max_payout_per_clip'])}/clip")
-    lines = [f"**{TIERS[t]}**", f"**{_short_name(c['name'])}**", " · ".join(nums)]
+    head = "⏸ PAUSED" if t == "running" and c["paused"] else TIERS[t]
+    lines = [f"**{head}**", f"**{_short_name(c['name'])}**", " · ".join(nums)]
     if eff:
         lines.append(f"Effort: {EFFORT_ICON[eff['effort']]}" + (f" · {eff['why']}" if eff.get("why") else ""))
     lines.append(f"Posts to: {_where(c)}")
     if t == "running":
+        from . import guide
         s = campaigns.lane_stats(c)
         lines.append(f"Clips: review {s['review']} · scheduled {s['scheduled']} · posted {s['posted']} · "
                      f"{s['views']:,} views · ~${s['earned']:,.2f}")
+        g = guide.get(c)
+        lines.append(f"Guide: {len(g['do'])} do · {len(g['avoid'])} avoid" if g["do"] or g["avoid"]
+                     else "Guide: none yet, tap 📋 Guide and paste the campaign's instructions")
+        srcs = campaigns.sources(c["id"])
+        lines.append("Footage: " + (", ".join(x["kind"].replace("_", " ") for x in srcs) if srcs
+                                    else "none yet, tap 🎬 Footage"))
+        lines.append(f"id `{c['id']}`")
     else:
         _, reasons = campaigns.fit(c)
         if reasons:
@@ -145,7 +154,7 @@ def _running():
     """Lanes the tool is running. Template lanes from campaigns.yaml count once they have videos."""
     out = []
     for c in campaigns.all_campaigns():
-        if campaigns.lane_state(c) != "running":
+        if campaigns.lane_state(c) not in ("running", "paused") or c.get("stage") != "active":
             continue
         if c.get("origin") == "yaml" and not db.one("SELECT 1 FROM videos WHERE campaign_id=?", c["id"]):
             continue
@@ -182,7 +191,9 @@ def plan(max_ai=5):
         st = campaigns.lane_stats(c)
         total_views += st["views"]
         total_usd += st["earned"]
-        running.append({"key": f"running:c:{c['id']}", "tier": "running", "buttons": [],
+        running.append({"key": f"running:c:{c['id']}", "tier": "running",
+                        "buttons": [["📋 Guide", f"guide:{c['id']}", "grey"], ["🎬 Footage", f"src:{c['id']}", "grey"],
+                                    ["▶ Resume" if c["paused"] else "⏸ Pause", f"pause:{c['id']}", "grey"]],
                         "text": card(c, "running", effort(c, allow_ai=False))})
     running.append({"key": "running:summary", "tier": "summary", "buttons": [], "text": (
         f"**Active campaigns** · {now:%b %d, %I:%M %p} ET\n"

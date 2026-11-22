@@ -252,10 +252,12 @@ class Bot(discord.Client):
         if not text.startswith(("!", "/")):
             from . import joinflow
             cid = await asyncio.to_thread(joinflow.awaiting)
-            if not cid or (len(text) < 80 and not text.startswith(("http", "<http", "@")) and ":\\" not in text):
+            kind = await asyncio.to_thread(joinflow.awaiting_kind)
+            linkish = text.startswith(("http", "<http", "@")) or ":\\" in text
+            if not cid or len(text) < (20 if kind == "guide" else 80) and not linkish:
                 return
-            async with message.channel.typing():   # the pasted campaign page after "I joined"
-                reply = await asyncio.to_thread(commands.brief, cid, text)
+            async with message.channel.typing():   # the page after "I joined", or a guide / footage after a card button
+                reply = await asyncio.to_thread(commands.pasted, cid, text)
             for i in range(0, len(reply), 1900):
                 await message.channel.send(reply[i:i + 1900])
             return

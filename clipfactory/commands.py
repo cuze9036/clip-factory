@@ -288,11 +288,10 @@ def handle(text):
             cid = _resolve(args[0])
             if campaigns.get(cid) and len(args) > 1:
                 return joinflow.add_link(cid, " ".join(args[1:]))
-            # Just a link: use the campaign you joined last.
-            cid = joinflow.awaiting() or joinflow.last_joined()
+            # Just a link: the campaign waiting for it, or the only running one.
+            cid, question = _which()
             if not cid:
-                return ("Which campaign? Tap **I joined** on its card first, or send "
-                        "`!source <number from !suggested> <link>`.")
+                return question
             return joinflow.add_link(cid, rest)
         if cmd == "!add":
             vid = watcher.add_video(args[0], args[1])
@@ -339,13 +338,15 @@ def handle(text):
             return "Refreshing #campaign-updates and #active-campaigns (about a minute)."
         if cmd == "!guide":
             from . import guide, joinflow
-            cid = _resolve(args[0]) if args else ""
-            text = rest.partition(" ")[2] if args and campaigns.get(cid) else rest
-            if not campaigns.get(cid):
-                cid = joinflow.awaiting() or joinflow.last_joined()
+            first = _resolve(args[0]) if args else ""
+            text = rest.partition(" ")[2] if campaigns.get(first) else rest
+            cid, question = _which(first)
             if not cid:
-                return "Which campaign? Send `!guide <campaign number or id> <instructions>`."
-            return guide.add(cid, text) if len(text.strip()) >= 20 else guide.show(cid)
+                return question
+            if len(text.strip()) >= 20:
+                joinflow.done_waiting()
+                return guide.add(cid, text)
+            return guide.show(cid)
         if cmd == "!emails":
             from . import gmail_watch
             return gmail_watch.emails_command()
@@ -362,6 +363,73 @@ def handle(text):
         db.log(None, f"Command {cmd} failed: {e}", "error")
         return f"That didn't work: {str(e)[:300]}"
     return "Unknown command. Type `!help`."
+
+
+def _which(arg_cid=None):
+    """The campaign a command means when you didn't name one: the one waiting for your paste, else the only
+    running one. With several running, returns (None, a question listing them)."""
+    from . import joinflow
+    if arg_cid and campaigns.get(arg_cid):
+        return arg_cid, None
+    cid = joinflow.awaiting()
+    if cid:
+        return cid, None
+    running = [c for c in campaigns.all_campaigns() if c.get("stage") == "active" and not c["paused"]
+               and c.get("origin") != "yaml"]
+    if len(running) == 1:
+        return running[0]["id"], None
+    if not running:
+        last = joinflow.last_joined()
+        return (last, None) if last else (None, "Which campaign? Tap **I joined** on its card first.")
+    names = "\n".join(f"• `{c['id']}` {c['name']}" for c in running)
+    return None, ("Which campaign? Tap **📋 Guide** or **🎬 Footage** on its card in #active-campaigns, "
+                  f"or put its id first:\n{names}")
+
+
+def pasted(cid, text):
+    """Something you pasted while a campaign was waiting for it: its page (after I joined), a guide or footage
+    (after the 📋 Guide / 🎬 Footage buttons). The reply always names the campaign."""
+    from . import guide, joinflow
+    kind = joinflow.awaiting_kind() or "brief"
+    if kind == "guide":
+        try:
+            reply = guide.add(cid, text)
+        except Exception as e:
+            return f"Couldn't read that guide: {str(e)[:200]}. Paste it again, or use `!guide {cid} <text>`."
+        joinflow.done_waiting()
+        return reply
+    if kind == "source":
+        links = re.findall(r"https?://\S+|[A-Za-z]:\\[^\n]+|@[\w.-]+", text)
+        if not links:
+            return "Send a Dropbox / YouTube / Twitch link or a folder path."
+        c = campaigns.get(cid)
+        replies = [joinflow.add_link(cid, link.strip()) for link in links[:5]]
+        joinflow.done_waiting()
+        return f"**{c['name']}**:\n" + "\n".join(replies)
+    return brief(cid, text)
+
+
+def card_button(kind, cid):
+    """📋 Guide / 🎬 Footage / ⏸ Pause on a campaign card in #active-campaigns."""
+    from . import guide, joinflow
+    c = campaigns.get(cid)
+    if not c:
+        return f"No campaign `{cid}`."
+    if kind == "guide":
+        joinflow.expect(cid, "guide")
+        return (guide.show(cid) + f"\n\n**Now paste the guide / reference material for {c['name']}** "
+                "(next 30 minutes; a long paste can be a file). It's added to this campaign only.")
+    if kind == "src":
+        joinflow.expect(cid, "source")
+        srcs = campaigns.sources(cid)
+        have = "\n".join(f"• {s['kind'].replace('_', ' ')}: {s['name'][:80]}" for s in srcs) or "• none yet"
+        return (f"**Footage for {c['name']}**\n{have}\n\n**Now send the Dropbox / YouTube / Twitch link or "
+                "folder path** for this campaign (next 30 minutes).")
+    if kind == "pause":
+        paused = not c["paused"]
+        campaigns.set_paused(cid, paused)
+        return f"**{c['name']}** {'paused' if paused else 'running again'}."
+    return "That button has expired."
 
 
 def brief(cid, text):
@@ -401,6 +469,8 @@ def _button(custom_id):
         return f"Skipped post {rest}."
     if kind == "act":
         return activate(rest)
+    if kind in ("guide", "src", "pause"):
+        return card_button(kind, rest)
     if kind == "join":
         from . import joinflow
         return joinflow.joined(rest)

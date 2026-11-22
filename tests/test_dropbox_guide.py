@@ -134,5 +134,51 @@ class DropboxGuideTest(unittest.TestCase):
         self.assertEqual(len(campaigns.sources(cid)), 1)
 
 
+    def _two_running(self):
+        from clipfactory import campaigns
+        a = campaigns.suggest({"name": "Band Live", "platforms": ["youtube"], "rate_per_1k": 2}, "pasted")
+        b = campaigns.suggest({"name": "Podcast Clips", "platforms": ["youtube"], "rate_per_1k": 1}, "pasted")
+        campaigns.activate(a)
+        campaigns.activate(b)
+        return a, b
+
+    def test_card_buttons_send_the_paste_to_that_campaign_only(self):
+        from clipfactory import campaigns, commands, llm
+        a, b = self._two_running()
+        out = commands.button(f"guide:{b}")
+        self.assertIn("Now paste the guide / reference material for Podcast Clips", out)
+        with mock.patch.object(llm, "complete_json", return_value=GUIDE):
+            out = commands.pasted(b, "Clip the funniest guest stories, never the ad reads, keep it under 45 s.")
+        self.assertIn("Guide for Podcast Clips", out)
+        self.assertTrue(campaigns._extra(campaigns.get(b)).get("guide"))
+        self.assertFalse(campaigns._extra(campaigns.get(a)).get("guide"))
+        out = commands.button(f"src:{a}")
+        self.assertIn("Footage for Band Live", out)
+        out = commands.pasted(a, "https://www.dropbox.com/scl/fo/a/b?rlkey=k&dl=0")
+        self.assertTrue(out.startswith("**Band Live**"))
+        self.assertEqual(campaigns.sources(a)[0]["kind"], "dropbox")
+        self.assertEqual(campaigns.sources(b), [])
+
+    def test_unclear_campaign_asks_which(self):
+        from clipfactory import commands
+        a, b = self._two_running()
+        out = commands.handle("!guide Clip the funniest guest stories and never the ad reads please.")
+        self.assertIn("Which campaign?", out)
+        self.assertIn(f"`{a}`", out)
+        self.assertIn(f"`{b}`", out)
+        self.assertIn("Which campaign?", commands.handle("!source https://www.youtube.com/@x"))
+        with mock.patch("clipfactory.llm.complete_json", return_value=GUIDE):
+            self.assertIn("Guide for Podcast Clips", commands.handle(f"!guide {b} Clip the funniest guest stories."))
+
+    def test_pause_button_toggles_and_card_shows_it(self):
+        from clipfactory import board, commands
+        a, _ = self._two_running()
+        self.assertIn("paused", commands.button(f"pause:{a}"))
+        card = next(i for i in board.plan()["running"] if i["key"] == f"running:c:{a}")
+        self.assertTrue(card["text"].startswith("**⏸ PAUSED**"))
+        self.assertEqual(card["buttons"][2][0], "▶ Resume")
+        self.assertIn("running again", commands.button(f"pause:{a}"))
+
+
 if __name__ == "__main__":
     unittest.main()

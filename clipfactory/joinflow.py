@@ -120,7 +120,7 @@ def joined(cid):
     extra = campaigns._extra(c)
     extra["joined_at"] = iso(utcnow())
     db.x("UPDATE campaigns SET notes=? WHERE id=?", json.dumps(extra), cid)
-    db.kv_set(AWAIT_KEY, {"cid": cid, "until": iso(utcnow() + dt.timedelta(minutes=AWAIT_MINUTES))})
+    expect(cid, "brief", AWAIT_MINUTES)
     db.log(cid, "You joined this campaign")
     return (f"Nice, you joined **{c['name']}**.\n"
             "Last step: on the Whop campaign page press **Ctrl+A**, then **Ctrl+C**, and paste it here "
@@ -129,11 +129,26 @@ def joined(cid):
 
 
 def awaiting():
-    """The campaign waiting for its pasted page, or None."""
+    """The campaign waiting for something you paste (its page, a guide or a footage link), or None."""
     a = db.kv_get(AWAIT_KEY)
     if not a or utcnow() > parse_iso(a["until"]):
         return None
     return a["cid"]
+
+
+def awaiting_kind():
+    """'brief' (after I joined), 'guide' or 'source' (after the card buttons)."""
+    a = db.kv_get(AWAIT_KEY)
+    return (a or {}).get("kind", "brief") if awaiting() else None
+
+
+def expect(cid, kind, minutes=30):
+    """The next thing you paste (in #general or a campaign board) goes to this campaign as `kind`."""
+    db.kv_set(AWAIT_KEY, {"cid": cid, "kind": kind, "until": iso(utcnow() + dt.timedelta(minutes=minutes))})
+
+
+def done_waiting():
+    db.kv_set(AWAIT_KEY, None)
 
 
 def last_joined():

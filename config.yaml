@@ -96,6 +96,7 @@ discovery:                        # finds new clipping campaigns and suggests th
   interests: []                   # e.g. ["gta", "gaming", "stream", "podcast"]; empty = any topic
 
 discord:
+  board_channel: campaigns        # live campaign board: one card per campaign, kept up to date by the bot
   feed_channel: campaign-feed     # follow clipping communities' announcement channels into this channel;
                                   # the bot reads every post there and turns campaigns into suggestions
 

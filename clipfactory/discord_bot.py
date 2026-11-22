@@ -1,6 +1,7 @@
 """Discord bot: posts every alert from the outbox to your channel, and takes your commands and button taps.
 Only the owner (DISCORD_OWNER_ID) in the control channel (DISCORD_CHANNEL_ID) can control it."""
 import asyncio
+import datetime
 import os
 import subprocess
 
@@ -62,6 +63,7 @@ class Bot(discord.Client):
         self.channel_id = int(config.env("DISCORD_CHANNEL_ID"))
         self.owner_id = int(config.env("DISCORD_OWNER_ID"))
         self.feed_id = None
+        self.board_id = None
 
     async def setup_hook(self):
         self.tree = discord.app_commands.CommandTree(self)
@@ -69,6 +71,7 @@ class Bot(discord.Client):
             self.tree.add_command(self._slash(name, about, box))
         self.loop.create_task(self.drain_outbox())
         self.loop.create_task(self.heartbeat())
+        self.loop.create_task(self.board_loop())
 
     def _slash(self, name, about, box):
         """A real Discord slash command (shows up in the / menu) that runs the same as typing !name."""
@@ -100,6 +103,7 @@ class Bot(discord.Client):
                 await self.tree.sync(guild=ch.guild)
             except discord.HTTPException as e:
                 db.log(None, f"Slash commands not registered: {e}", "warn")
+        await self.find_board(ch)
         name = (config.section("discord").get("feed_channel") or "").lstrip("#")
         feed = discord.utils.get(ch.guild.text_channels, name=name) if name and ch.guild else None
         if feed:
@@ -119,6 +123,80 @@ class Bot(discord.Client):
             await asyncio.to_thread(joinflow.from_feed, text, message.id)
         except Exception as e:
             db.log(None, f"#campaign-feed message not read: {str(e)[:200]}", "warn")
+
+    # ---------- #campaigns board ----------
+
+    async def find_board(self, ch):
+        from . import board
+        name = board.channel_name()
+        if not ch.guild:
+            return
+        chan = discord.utils.get(ch.guild.text_channels, name=name)
+        if not chan:
+            try:
+                chan = await ch.guild.create_text_channel(name, topic="Live clipping campaigns, kept up to date by Clip Factory")
+            except discord.HTTPException:
+                await ch.send(f"Create a text channel named #{name} and I'll keep the live campaign board there.")
+                return
+        self.board_id = chan.id
+
+    async def board_loop(self):
+        await self.wait_until_ready()
+        from . import board
+        tick = 0
+        while not self.is_closed():
+            try:
+                dirty = await asyncio.to_thread(db.kv_get, "board_dirty")
+                if self.board_id and (dirty or tick % 4 == 0):   # every 2 minutes, or right after a button tap
+                    await asyncio.to_thread(db.kv_set, "board_dirty", None)
+                    await self.refresh_board(board)
+            except Exception as e:
+                db.log(None, f"Campaign board refresh failed: {str(e)[:200]}", "warn")
+            tick += 1
+            await asyncio.sleep(30)
+
+    async def refresh_board(self, board):
+        chan = self.get_channel(self.board_id) or await self.fetch_channel(self.board_id)
+        desired = await asyncio.to_thread(board.plan)
+        rows = await asyncio.to_thread(board.current)
+        kind, keys = board.ops(desired, rows)
+        if kind == "edit" and board.due() and "summary" not in keys:
+            keys.append("summary")
+        if kind == "edit":
+            by_key = {r["key"]: r for r in rows}
+            for d in desired:
+                if d["key"] not in keys:
+                    continue
+                try:
+                    await chan.get_partial_message(int(by_key[d["key"]]["message_id"])).edit(
+                        content=d["text"], view=view_for(d["buttons"]))
+                    await asyncio.to_thread(db.x, "UPDATE board SET hash=? WHERE key=?", board.digest(d), d["key"])
+                except discord.NotFound:   # someone deleted it: rebuild the board next time
+                    await asyncio.to_thread(db.x, "DELETE FROM board WHERE key=?", d["key"])
+                    await asyncio.to_thread(db.kv_set, "board_dirty", True)
+            if "summary" in keys:
+                await asyncio.to_thread(board.mark_full)
+            return
+        # Repost: the set of campaigns or their priority changed, and Discord can't reorder messages.
+        tracked = {r["message_id"] for r in rows}
+        for r in rows:
+            try:
+                await chan.get_partial_message(int(r["message_id"])).delete()
+            except discord.HTTPException:
+                pass
+        old = discord.utils.utcnow() - datetime.timedelta(minutes=30)
+        async for m in chan.history(limit=100):   # tidy the bot's own old replies too
+            if m.author == self.user and str(m.id) not in tracked and m.created_at < old:
+                try:
+                    await m.delete()
+                except discord.HTTPException:
+                    pass
+        await asyncio.to_thread(db.x, "DELETE FROM board")
+        for pos, d in enumerate(desired):
+            msg = await chan.send(d["text"], view=view_for(d["buttons"]))
+            await asyncio.to_thread(db.x, "INSERT OR REPLACE INTO board(key, message_id, hash, pos, tier) VALUES(?,?,?,?,?)",
+                                    d["key"], str(msg.id), board.digest(d), pos, d["tier"])
+        await asyncio.to_thread(board.mark_full)
 
     async def heartbeat(self):
         """Every 30 s, tell the offline-alert service (HEARTBEAT_URL, e.g. healthchecks.io) the bot is alive.
@@ -156,7 +234,7 @@ class Bot(discord.Client):
             await asyncio.sleep(5)
 
     def _allowed(self, user_id, channel_id):
-        return user_id == self.owner_id and channel_id == self.channel_id
+        return user_id == self.owner_id and channel_id in (self.channel_id, self.board_id)
 
     async def on_message(self, message):
         if self.feed_id and message.channel.id == self.feed_id:
@@ -189,10 +267,13 @@ class Bot(discord.Client):
             return
         await interaction.response.defer()
         reply = await asyncio.to_thread(commands.button, interaction.data.get("custom_id", ""))
-        try:
-            await interaction.message.edit(view=None)
-        except discord.HTTPException:
-            pass
+        if interaction.channel_id == self.board_id:
+            await asyncio.to_thread(db.kv_set, "board_dirty", True)   # board cards keep their buttons
+        else:
+            try:
+                await interaction.message.edit(view=None)
+            except discord.HTTPException:
+                pass
         await interaction.followup.send(reply)
 
 

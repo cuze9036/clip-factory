@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS outbox(
 CREATE TABLE IF NOT EXISTS gmail_seen(
   id TEXT PRIMARY KEY, subject TEXT, date TEXT, internal_ms INTEGER, summary TEXT, action TEXT, deadline TEXT,
   seen_at TEXT);
+CREATE TABLE IF NOT EXISTS board(key TEXT PRIMARY KEY, message_id TEXT, hash TEXT, pos INTEGER, tier TEXT);
 CREATE TABLE IF NOT EXISTS discovered(key TEXT PRIMARY KEY, campaign_id TEXT, created_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_moments_status ON moments(status, campaign_id);
 CREATE INDEX IF NOT EXISTS idx_clips_status ON clips(status, campaign_id);

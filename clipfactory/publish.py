@@ -299,8 +299,29 @@ def ready_folder(platform):
     return d
 
 
-def hand_off(post, clip):
-    """Manual platforms: put the clip and its caption in 'Ready to post' and tell you on Discord."""
+def when_text(post):
+    """'9:00 PM ET (7:30 AM IST)' for a post's time."""
+    from zoneinfo import ZoneInfo
+    from .util import ET
+    t = parse_iso(post["scheduled_at"])
+    et = t.astimezone(ET)
+    out = f"{et:%I:%M %p}".lstrip("0") + " ET"
+    tz = config.get().get("owner_timezone")
+    if tz:
+        try:
+            own = t.astimezone(ZoneInfo(tz))
+            day = "" if own.date() == et.date() else f" {own:%a}"
+            out += f" ({own:%I:%M %p}".replace("(0", "(") + f"{day} {own.tzname()})"
+        except Exception:
+            pass
+    return out
+
+
+def is_manual(post):
+    return post.get("mode") == "manual" or post["platform"] in (config.get().get("always_manual") or [])
+
+
+def _ready_files(post, clip):
     import shutil
     safe = re.sub(r'[<>:"/\\|?*]+', "", clip["title"] or "clip")[:50].strip()
     base = ready_folder(post["platform"]) / f"#{post['id']} {safe}"
@@ -308,20 +329,62 @@ def hand_off(post, clip):
     caption = _caption(clip, post["platform"], _campaign(post))
     with open(f"{base}.txt", "w", encoding="utf-8") as f:
         f.write(caption)
-    db.x("UPDATE posts SET status='manual', error=NULL WHERE id=?", post["id"])
-    camp = db.one("SELECT name, url FROM campaigns WHERE id=?", post["campaign_id"])
+    return f"#{post['id']} {safe}", caption
+
+
+def deliver(post, clip):
+    """Early: the video and caption go to Telegram (and 'Ready to post') hours before the posting time."""
+    name_, caption = _ready_files(post, clip)
+    camp = db.one("SELECT name FROM campaigns WHERE id=?", post["campaign_id"])
     from . import telegram
-    on_phone = "The video and caption are on Telegram. " if telegram.creds() else ""
-    notify.send("manual", f"Time to post on {name(post['platform'])} (post {post['id']}) · {camp['name']}\n"
-                f"{on_phone}Video also in: Clipping Tools\\Ready to post\\{post['platform']}\\#{post['id']} {safe}.mp4\n"
-                f"Caption:\n```\n{caption[:1200]}\n```\n"
-                f"After posting, type `!posted {post['id']} <link to your post>`",
-                campaign_id=post["campaign_id"], clip_id=post["clip_id"], post_id=post["id"],
-                file_path=clip["final_path"], buttons=[["Skip this one", f"skip:{post['id']}", "grey"]])
     try:
-        telegram.hand_off(post, clip, caption, camp["name"])
+        telegram.hand_off(post, clip, caption, camp["name"], when_text(post))
     except Exception as e:
         db.log(post["campaign_id"], f"Telegram hand-off failed for post {post['id']}: {e}", "warn")
+    db.x("UPDATE posts SET delivered_at=? WHERE id=?", iso(utcnow()), post["id"])
+    return name_
+
+
+def remind(post, clip):
+    """Shortly before the posting time: a short Discord reminder (the video is already on Telegram)."""
+    from . import telegram
+    within = config.section("manual_posting").get("remind_minutes_before", 30)
+    camp = db.one("SELECT name FROM campaigns WHERE id=?", post["campaign_id"])
+    where = "on Telegram" if telegram.creds() else "in Clipping Tools\\Ready to post\\" + post["platform"]
+    db.x("UPDATE posts SET status='manual', reminded_at=?, error=NULL WHERE id=?", iso(utcnow()), post["id"])
+    notify.send("manual", f"⏰ **Time to post on {name(post['platform'])}** at {when_text(post)} · "
+                f"post {post['id']} · {camp['name']}\n"
+                f"The video and caption are {where} (sent earlier). Post it within {within} minutes, then "
+                f"`!posted {post['id']} <link to your post>`.",
+                campaign_id=post["campaign_id"], clip_id=post["clip_id"], post_id=post["id"],
+                buttons=[["Skip this one", f"skip:{post['id']}", "grey"]])
+
+
+def hand_off(post, clip):
+    """Both steps at once (a post that is already due)."""
+    if not post.get("delivered_at"):
+        deliver(post, clip)
+    remind(post, clip)
+
+
+def run_manual():
+    """Posts you make by hand: deliver early to Telegram, remind on Discord shortly before the time."""
+    cfg = config.section("manual_posting")
+    now = utcnow()
+    horizon = iso(now + dt.timedelta(hours=cfg.get("deliver_hours_before", 24)))
+    remind_at = dt.timedelta(minutes=cfg.get("remind_minutes_before", 30))
+    for post in db.q("SELECT * FROM posts WHERE status='queued' AND scheduled_at <= ? ORDER BY scheduled_at", horizon):
+        if not is_manual(post):
+            continue
+        clip = db.one("SELECT * FROM clips WHERE id=?", post["clip_id"])
+        try:
+            if not post.get("delivered_at"):
+                deliver(post, clip)
+                post = db.one("SELECT * FROM posts WHERE id=?", post["id"])
+            if parse_iso(post["scheduled_at"]) - remind_at <= now:
+                remind(post, clip)
+        except Exception as e:
+            db.log(post["campaign_id"], f"Couldn't prepare post {post['id']}: {e}", "error")
 
 
 def mark_posted(post_id, url):
@@ -333,16 +396,12 @@ def mark_posted(post_id, url):
 
 
 def run_due():
+    run_manual()
     done = 0
     for post in due_posts():
         clip = db.one("SELECT * FROM clips WHERE id=?", post["clip_id"])
-        if post.get("mode") == "manual" or post["platform"] in (config.get().get("always_manual") or []):
-            if parse_iso(post["scheduled_at"]) <= utcnow():
-                try:
-                    hand_off(post, clip)
-                except Exception as e:
-                    db.log(post["campaign_id"], f"Couldn't prepare post {post['id']}: {e}", "error")
-            continue
+        if is_manual(post):
+            continue   # handled by run_manual()
         if post["platform"] == "youtube":
             key, n = youtube_uploads_today()
             if n >= config.section("schedule").get("youtube_uploads_per_day", 6):

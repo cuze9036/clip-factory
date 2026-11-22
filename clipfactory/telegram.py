@@ -47,11 +47,12 @@ def send_video(path, caption=""):
         raise RuntimeError(result.get("description", "Telegram refused the video"))
 
 
-def hand_off(post, clip, caption, campaign_name):
+def hand_off(post, clip, caption, campaign_name, when=""):
     """The video, then the caption on its own so it's easy to copy. Returns False when Telegram isn't set up."""
     if not creds():
         return False
     from .publish import name
-    send_video(clip["final_path"], f"{name(post['platform'])} · post {post['id']} · {campaign_name}")
+    send_video(clip["final_path"], f"{name(post['platform'])} · post {post['id']} · {campaign_name}"
+               + (f"\nPost at {when}" if when else ""))
     send_text(caption)
     return True

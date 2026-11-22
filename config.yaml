@@ -152,6 +152,10 @@ accounts:
 # A platform with its keys set in .env posts automatically instead.
 # Add tiktok only if you can use TikTok where you are (it is blocked in India).
 manual_platforms: [instagram, facebook, tiktok, x]
+manual_posting:                   # clips you post by hand
+  deliver_hours_before: 24        # video + caption reach Telegram this long before the posting time
+  remind_minutes_before: 30       # Discord reminds you this long before the posting time
+owner_timezone: Asia/Kolkata      # reminders show this time next to US Eastern
 always_manual: [youtube]          # YouTube API uploads stay private until Google's audit passes, so you post
                                   # YouTube Shorts yourself for now. Remove youtube here once the audit is approved.
 

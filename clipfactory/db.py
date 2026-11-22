@@ -68,6 +68,7 @@ MIGRATIONS = [
     ("campaigns", "auto_approve_score", "REAL"),
     ("campaigns", "found_at", "TEXT"),
     ("posts", "mode", "TEXT DEFAULT 'auto'"),
+    ("campaigns", "seen_at", "TEXT"),
 ]
 
 _local = threading.local()

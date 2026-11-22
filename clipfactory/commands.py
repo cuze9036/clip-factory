@@ -8,6 +8,7 @@ HELP = """**Clip Factory commands**
 `!status` every lane's numbers
 `!review` clips waiting for you · `!approve <clip> [title 1-3]` · `!reject <clip> [reason]` · `!cancel <clip>`
 `!todo` clips to post yourself and links to submit · `!posted <post> <link>` · `!submitted <post>`
+`!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
 `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
@@ -82,7 +83,7 @@ def suggested():
         auto = "youtube" in c["platforms"]
         rows.append(((not ok, not c["rate_per_1k"], not auto, -c["rate_per_1k"], clippers), c, ok, clippers))
     if not rows:
-        return "No found campaigns waiting. The finder looks again every 6 hours, or type `!find`."
+        return "No found campaigns waiting. The finder looks again every hour, or type `!find`."
     rows.sort(key=lambda r: r[0])
     db.kv_set("suggested_order", [r[1]["id"] for r in rows])
     out = ["**Found campaigns** (best first)"]
@@ -97,8 +98,8 @@ def suggested():
                    f"    {' · '.join(bits)} · {_where(c)}")
         if c["url"]:
             out.append(f"    {c['url']}")
-    out.append("\n**To start one:** search its name on Whop and join, copy the content link it gives you, then\n"
-               "`!source 1 <link>` and `!activate 1` (use the campaign's number). Not interested: `!ignore 1`.")
+    out.append("\n**To start one:** type `!campaign` for cards with Open / I joined buttons, join on Whop, tap "
+               "I joined and paste the campaign page. Not interested: `!ignore 1`.")
     return "\n".join(out)
 
 
@@ -254,9 +255,15 @@ def handle(text):
         if cmd == "!add":
             vid = watcher.add_video(args[0], args[1])
             return f"Added `{vid}` to `{args[1]}`. The AI will look for moments on the next pass."
+        if cmd == "!live" or (cmd == "!campaign" and not rest):
+            from . import joinflow
+            return joinflow.post_live()
         if cmd == "!campaign":
+            from . import joinflow
             if len(rest) < 40:
-                return "Paste the whole campaign page after `!campaign`."
+                return "Paste the whole campaign page after `!campaign`, or type `!campaign` alone to see live ones."
+            if joinflow.awaiting():
+                return joinflow.apply_brief(joinflow.awaiting(), rest)
             from . import discovery
             cid, ok = discovery.add_from_text(rest, origin="pasted")
             return None  # the suggestion message with buttons comes from the outbox
@@ -301,6 +308,16 @@ def handle(text):
     return "Unknown command. Type `!help`."
 
 
+def brief(cid, text):
+    """The campaign page pasted after tapping "I joined"."""
+    from . import joinflow
+    try:
+        return joinflow.apply_brief(cid, text)
+    except Exception as e:
+        db.log(cid, f"Reading the pasted campaign page failed: {e}", "error")
+        return f"Couldn't read that page: {str(e)[:300]}. Try pasting it again, or use `!source {cid} <link>`."
+
+
 def button(custom_id):
     """A tapped button -> reply text."""
     try:
@@ -326,6 +343,9 @@ def _button(custom_id):
         return f"Skipped post {rest}."
     if kind == "act":
         return activate(rest)
+    if kind == "join":
+        from . import joinflow
+        return joinflow.joined(rest)
     if kind == "ign":
         return ignore(rest)
     return "That button has expired."

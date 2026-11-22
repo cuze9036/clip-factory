@@ -165,11 +165,35 @@ def add_from_data(data, text, provider, key=None, origin="discovered", notify_al
         db.x("INSERT OR REPLACE INTO discovered(key, campaign_id, created_at) VALUES(?,?,?)", key, cid, iso(utcnow()))
     c = campaigns.get(cid)
     msg, ok = summary(c)
-    if ok or notify_always:
-        notify.send("campaign", ("New campaign found\n" if origin == "discovered" else "") + msg, campaign_id=cid,
+    if origin in ("discovered", "feed"):
+        from . import joinflow
+        db.x("UPDATE campaigns SET seen_at=? WHERE id=?", iso(utcnow()), cid)
+        if ok or notify_always:
+            notify.send("campaign", "**New campaign found**\n" + joinflow.card(campaigns.get(cid)), campaign_id=cid,
+                        buttons=joinflow.buttons(campaigns.get(cid)))
+    elif ok or notify_always:
+        notify.send("campaign", msg, campaign_id=cid,
                     buttons=[["Activate", f"act:{cid}", "green"], ["Ignore", f"ign:{cid}", "grey"]])
     db.log(cid, f"Campaign suggested ({'good fit' if ok else 'weak fit'}, read by {provider})")
     return cid, ok
+
+
+def _seen(cid, item):
+    """The campaign is still listed: mark it live and update its budget, rate and clipper count."""
+    db.x("UPDATE campaigns SET seen_at=? WHERE id=?", iso(utcnow()), cid)
+    data = from_listing(item)
+    if not data:
+        return
+    if data.get("budget_left") is not None:
+        db.x("UPDATE campaigns SET budget_left=? WHERE id=?", data["budget_left"], cid)
+    c = campaigns.get(cid)
+    if c and c.get("stage") == "suggested":
+        if data.get("rate_per_1k"):
+            db.x("UPDATE campaigns SET rate_per_1k=? WHERE id=?", data["rate_per_1k"], cid)
+        extra = campaigns._extra(c)
+        if data.get("clippers") is not None:
+            extra["clippers"] = data["clippers"]
+            db.x("UPDATE campaigns SET notes=? WHERE id=?", json.dumps(extra), cid)
 
 
 def run():
@@ -188,12 +212,18 @@ def run():
         return 0
     for item in items:
         key = _key(item)
-        if db.one("SELECT 1 FROM discovered WHERE key=?", key):
+        known = db.one("SELECT campaign_id FROM discovered WHERE key=?", key)
+        same = campaigns.find_same(_name(item)) if _name(item) else None
+        cid = (known or {}).get("campaign_id") or (same or {}).get("id")
+        if known or same:
+            if same and not known:
+                db.x("INSERT OR REPLACE INTO discovered(key, campaign_id, created_at) VALUES(?,?,?)", key,
+                     same["id"], iso(utcnow()))
+            if cid:
+                _seen(cid, item)
             continue
-        if _name(item) and campaigns.find_same(_name(item)):
-            db.x("INSERT OR REPLACE INTO discovered(key, campaign_id, created_at) VALUES(?,?,?)", key,
-                 campaigns.find_same(_name(item))["id"], iso(utcnow()))
-            continue
+        if found >= d.get("max_suggestions_per_run", 5):
+            continue  # enough new ones this run; the rest come next hour
         try:
             text = json.dumps(item, ensure_ascii=False)[:12000]
             data = from_listing(item)
@@ -205,7 +235,5 @@ def run():
         except Exception as e:
             db.x("INSERT OR REPLACE INTO discovered(key, campaign_id, created_at) VALUES(?,?,?)", key, None, iso(utcnow()))
             db.log(None, f"Couldn't read a campaign listing: {e}", "warn")
-        if found >= d.get("max_suggestions_per_run", 5):
-            break
     db.kv_set("discovery_last_run", iso(utcnow()))
     return found

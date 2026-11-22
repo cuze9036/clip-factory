@@ -34,8 +34,24 @@ def view_for(buttons):
         return None
     v = discord.ui.View(timeout=None)
     for label, custom_id, style in buttons[:20]:
-        v.add_item(discord.ui.Button(label=label[:80], custom_id=custom_id, style=STYLES.get(style, STYLES["grey"])))
+        if style == "link":   # opens a web page; custom_id holds the URL
+            v.add_item(discord.ui.Button(label=label[:80], url=custom_id, style=discord.ButtonStyle.link))
+        else:
+            v.add_item(discord.ui.Button(label=label[:80], custom_id=custom_id,
+                                         style=STYLES.get(style, STYLES["grey"])))
     return v
+
+
+async def full_text(message):
+    """Message text plus any pasted .txt file (Discord turns long pastes into message.txt) and embeds."""
+    parts = [message.content or ""]
+    for a in message.attachments:
+        if (a.filename or "").lower().endswith(".txt") and a.size <= 200_000:
+            parts.append((await a.read()).decode("utf-8", "replace"))
+    for e in message.embeds:
+        parts += [e.title or "", e.description or "", e.url or ""]
+        parts += [f"{f.name}: {f.value}" for f in e.fields]
+    return "\n".join(p for p in parts if p).strip()
 
 
 class Bot(discord.Client):
@@ -45,6 +61,7 @@ class Bot(discord.Client):
         super().__init__(intents=intents)
         self.channel_id = int(config.env("DISCORD_CHANNEL_ID"))
         self.owner_id = int(config.env("DISCORD_OWNER_ID"))
+        self.feed_id = None
 
     async def setup_hook(self):
         self.loop.create_task(self.drain_outbox())
@@ -53,6 +70,25 @@ class Bot(discord.Client):
         db.log(None, f"Discord bot online as {self.user}")
         ch = self.get_channel(self.channel_id) or await self.fetch_channel(self.channel_id)
         await ch.send(f"Clip Factory is running (version {commands.version()}). Type `!help` for commands.")
+        name = (config.section("discord").get("feed_channel") or "").lstrip("#")
+        feed = discord.utils.get(ch.guild.text_channels, name=name) if name and ch.guild else None
+        if feed:
+            self.feed_id = feed.id
+            try:   # catch up on what was posted while the tool was off
+                async for m in feed.history(limit=30, oldest_first=True):
+                    await self.read_feed(m)
+            except discord.HTTPException as e:
+                db.log(None, f"Couldn't read #{name}: {e}", "warn")
+
+    async def read_feed(self, message):
+        if message.author == self.user:
+            return
+        text = await full_text(message)
+        try:
+            from . import joinflow
+            await asyncio.to_thread(joinflow.from_feed, text, message.id)
+        except Exception as e:
+            db.log(None, f"#campaign-feed message not read: {str(e)[:200]}", "warn")
 
     async def drain_outbox(self):
         await self.wait_until_ready()
@@ -77,12 +113,24 @@ class Bot(discord.Client):
         return user_id == self.owner_id and channel_id == self.channel_id
 
     async def on_message(self, message):
+        if self.feed_id and message.channel.id == self.feed_id:
+            await self.read_feed(message)   # followed announcement posts arrive as bot/webhook messages
+            return
         if message.author.bot or not self._allowed(message.author.id, message.channel.id):
             return
-        if not message.content.strip().startswith(("!", "/")):
+        text = await full_text(message)
+        if not text.startswith(("!", "/")):
+            from . import joinflow
+            cid = await asyncio.to_thread(joinflow.awaiting)
+            if not cid or len(text) < 80:
+                return
+            async with message.channel.typing():   # the pasted campaign page after "I joined"
+                reply = await asyncio.to_thread(commands.brief, cid, text)
+            for i in range(0, len(reply), 1900):
+                await message.channel.send(reply[i:i + 1900])
             return
         async with message.channel.typing():
-            reply = await asyncio.to_thread(commands.handle, message.content)
+            reply = await asyncio.to_thread(commands.handle, text)
         if reply:
             for i in range(0, len(reply), 1900):
                 await message.channel.send(reply[i:i + 1900])

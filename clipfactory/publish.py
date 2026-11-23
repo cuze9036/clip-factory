@@ -473,9 +473,10 @@ def submit_reminder(post_id):
     kind = "Reel" if p["platform"] in ("instagram", "facebook") else "Short" if p["platform"] == "youtube" else "Post"
     head = (f"📌 **Submit now: {p['campaign']}**\n"
             f"{NAMES.get(p['platform'], p['platform'].title())} {kind} {reel_number(p)} · submit by {deadline}\n"
-            f"Copy the link below → Whop: {('<' + p['campaign_url'] + '>') if p['campaign_url'] else 'the campaign page'}")
+            f"Copy the link below → Whop: {('<' + p['campaign_url'] + '>') if p['campaign_url'] else 'the campaign page'}"
+            "\nSubmitted it? Tap ✅ Done.")
     notify.send("submit", head, campaign_id=p["campaign_id"], post_id=post_id,
-                buttons=[["Submitted", f"sub:{post_id}", "green"]])
+                buttons=[["✅ Done", f"sub:{post_id}", "green"]])
     notify.send("submit", p["url"], campaign_id=p["campaign_id"], post_id=post_id)
     db.kv_set(f"submit_ping:{post_id}", iso(utcnow()))
 
@@ -499,5 +500,5 @@ def submit_nudges():
         left = cfg.get("within_minutes", 30) - cfg.get("second_reminder_minutes", 20)
         notify.send("submit", f"⏰ **{p['campaign']}**: about {left} min left to submit this one "
                     f"({NAMES.get(p['platform'], p['platform'].title())} {reel_number(p)}).", campaign_id=p["campaign_id"], post_id=post_id,
-                    buttons=[["Submitted", f"sub:{post_id}", "green"]])
+                    buttons=[["✅ Done", f"sub:{post_id}", "green"]])
         notify.send("submit", p["url"], campaign_id=p["campaign_id"], post_id=post_id)

@@ -157,6 +157,8 @@ discord:
   insights_channel: ai-insights       # weekly AI review + daily check (made by the bot if missing)
   updates_channel: campaign-updates   # live campaigns you could join, with priority tags (kept up to date)
   active_channel: active-campaigns    # the campaigns the tool is running, with clips, views and earnings
+  submit_channel: clip-submission    # links to submit on Whop (with a ✅ Done button); falls back to the main channel
+  submitted_channel: approved-clips  # clips you marked ✅ Done (submitted)
   feed_channel: campaign-feed     # follow clipping communities' announcement channels into this channel;
                                   # the bot reads every post there and turns campaigns into suggestions
 

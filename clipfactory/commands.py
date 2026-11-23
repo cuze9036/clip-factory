@@ -252,10 +252,26 @@ def cancel(clip_id):
 
 
 def submitted(post_id):
-    if not db.one("SELECT 1 FROM posts WHERE id=?", post_id):
+    """✅ Done: marked submitted, its reminders leave #clip-submission and it's listed in #approved-clips."""
+    from . import publish
+    p = db.one("""SELECT p.*, c.name campaign FROM posts p JOIN campaigns c ON c.id=p.campaign_id WHERE p.id=?""",
+               post_id)
+    if not p:
         return f"No post {post_id}."
+    if p["submitted"]:
+        return f"Post {post_id} is already done."
     db.x("UPDATE posts SET submitted=1, submitted_at=? WHERE id=?", iso(utcnow()), post_id)
-    return f"Post {post_id} marked submitted."
+    db.x("DELETE FROM kv WHERE k=?", f"submit_ping:{post_id}")
+    ids = [r["message_id"] for r in db.q("""SELECT message_id FROM outbox WHERE post_id=? AND kind='submit'
+                                            AND message_id IS NOT NULL""", post_id)]
+    if ids:   # the bot removes the reminders, so #clip-submission shows only what's still to do
+        db.kv_set("discord_delete", (db.kv_get("discord_delete") or []) + [["submit", i] for i in ids])
+    name = publish.NAMES.get(p["platform"], (p["platform"] or "").title())
+    kind = "Reel" if p["platform"] in ("instagram", "facebook") else "Short" if p["platform"] == "youtube" else "Post"
+    now = publish.when_text({"scheduled_at": iso(utcnow())})
+    notify.send("submitted", f"✅ **{p['campaign']}** · {name} {kind} {publish.reel_number(p)} · submitted {now}\n"
+                f"{p['url'] or ''}", campaign_id=p["campaign_id"], post_id=post_id)
+    return f"✅ Done: {p['campaign']} {name} {kind} {publish.reel_number(p)} is in #approved-clips."
 
 
 def campaign_list():

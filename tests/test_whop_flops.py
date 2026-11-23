@@ -125,7 +125,25 @@ class LaneTest(unittest.TestCase):
         self.assertIn("submit by", head)
         self.assertIn("IST", head)
         self.assertEqual(link, "https://youtu.be/x")           # the link alone: easy to copy
-        self.assertEqual(sent.call_args_list[0].kwargs["buttons"][0][0], "Submitted")
+        self.assertEqual(sent.call_args_list[0].kwargs["buttons"][0][0], "✅ Done")
+
+    def test_done_moves_it_to_approved_clips(self):
+        from clipfactory import commands, db, notify, publish
+        clip, _ = self._clip(views=0, hours_ago=0)
+        pid = db.one("SELECT id FROM posts WHERE clip_id=?", clip)["id"]
+        publish.submit_reminder(pid)
+        db.x("UPDATE outbox SET message_id='111' WHERE kind='submit'")
+        out = commands.button(f"sub:{pid}")
+        self.assertIn("✅ Done", out)
+        self.assertEqual(db.one("SELECT submitted FROM posts WHERE id=?", pid)["submitted"], 1)
+        done = db.one("SELECT * FROM outbox WHERE kind='submitted'")
+        self.assertIn("Kitsch", done["text"])
+        self.assertIn("https://youtu.be/x", done["text"])
+        self.assertEqual(db.kv_get("discord_delete"), [["submit", "111"], ["submit", "111"]])
+        self.assertIn("already done", commands.button(f"sub:{pid}"))
+        with mock.patch.object(notify, "send") as sent:
+            publish.submit_nudges()
+        sent.assert_not_called()
 
     def test_one_more_ping_if_not_submitted(self):
         from clipfactory import db, notify, publish

@@ -66,6 +66,7 @@ class Bot(discord.Client):
         self.feed_id = None
         self.board_ids = {}
         self.insights_id = None   # #ai-insights: weekly review and daily check
+        self.submit_id = self.done_id = None   # #clip-submission (to submit) and #approved-clips (done)
 
     async def setup_hook(self):
         self.tree = discord.app_commands.CommandTree(self)
@@ -107,6 +108,7 @@ class Bot(discord.Client):
                 db.log(None, f"Slash commands not registered: {e}", "warn")
         await self.find_board(ch)
         await self.find_insights(ch)
+        await self.find_submit(ch)
         name = (config.section("discord").get("feed_channel") or "").lstrip("#")
         feed = discord.utils.get(ch.guild.text_channels, name=name) if name and ch.guild else None
         if feed:
@@ -146,6 +148,27 @@ class Bot(discord.Client):
             db.kv_set("board_missing_noted", True)
             await ch.send(f"I couldn't find {' and '.join(missing)}, so that board is off. "
                           "Create the channel (or set its name in config.local.yaml) and restart.")
+
+    async def find_submit(self, ch):
+        """#clip-submission (links to submit, ✅ Done) and #approved-clips (done). Existing channels only."""
+        from . import board
+        if not ch.guild:
+            return
+        d = config.section("discord")
+        names = [c.name for c in ch.guild.text_channels]
+        missing = []
+        for attr, key, default in (("submit_id", "submit_channel", "clip-submission"),
+                                   ("done_id", "submitted_channel", "approved-clips")):
+            wanted = (d.get(key) or default).lstrip("#")
+            found = board.match_channel(names, wanted)
+            if found:
+                setattr(self, attr, discord.utils.get(ch.guild.text_channels, name=found).id)
+            else:
+                missing.append(f"#{wanted}")
+        if missing and not db.kv_get("submit_missing_noted"):
+            db.kv_set("submit_missing_noted", True)
+            await ch.send(f"I couldn't find {' and '.join(missing)}, so those messages come here. Create the "
+                          "channel (or set its name in config.local.yaml) and restart.")
 
     async def find_insights(self, ch):
         """#ai-insights for the weekly review and the daily check; made once if it doesn't exist."""
@@ -258,15 +281,35 @@ class Bot(discord.Client):
                     target = ch
                     if row["kind"] in ("insights", "health") and self.insights_id:
                         target = self.get_channel(self.insights_id) or ch
+                    elif row["kind"] == "submit" and self.submit_id:
+                        target = self.get_channel(self.submit_id) or ch
+                    elif row["kind"] == "submitted" and self.done_id:
+                        target = self.get_channel(self.done_id) or ch
                     msg = await target.send(row["text"], **kwargs)
                     notify.mark_sent(row["id"], str(msg.id))
                 except Exception as e:
                     notify.mark_sent(row["id"], error=str(e)[:300])
                     db.log(row["campaign_id"], f"Discord send failed: {e}", "warn")
+            await self.delete_done()
             await asyncio.sleep(5)
 
+    async def delete_done(self):
+        """Reminders of clips marked ✅ Done leave #clip-submission."""
+        todo = await asyncio.to_thread(db.kv_get, "discord_delete")
+        if not todo:
+            return
+        await asyncio.to_thread(db.kv_set, "discord_delete", None)
+        for where, mid in todo:
+            chan = self.get_channel(self.submit_id or self.channel_id)
+            try:
+                msg = await chan.fetch_message(int(mid))
+                await msg.delete()
+            except (discord.HTTPException, AttributeError, ValueError):
+                pass   # already gone, or it was posted in another channel
+
     def _allowed(self, user_id, channel_id):
-        return user_id == self.owner_id and (channel_id in (self.channel_id, self.insights_id)
+        return user_id == self.owner_id and (channel_id in (self.channel_id, self.insights_id, self.submit_id,
+                                                            self.done_id)
                                              or channel_id in self.board_ids.values())
 
     async def on_message(self, message):
@@ -315,7 +358,8 @@ class Bot(discord.Client):
                 await interaction.message.edit(view=None)
             except discord.HTTPException:
                 pass
-        await interaction.followup.send(reply)
+        # ✅ Done replies only to you, so #clip-submission keeps only what's left to submit
+        await interaction.followup.send(reply, ephemeral=interaction.data.get("custom_id", "").startswith("sub:"))
 
 
 def run():

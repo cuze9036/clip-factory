@@ -165,18 +165,13 @@ def add_link(cid, line):
     """A link or folder for a campaign you joined: add it as footage and start the lane. Returns a reply."""
     c = campaigns.get(cid)
     line = line.strip().strip("<>")
-    if "docs.google.com/" in line:   # a guide in Google Docs, not footage
-        from . import guide
-        try:
-            return guide.add(cid, line)
-        except Exception as e:
-            return str(e)[:400]
+    if "docs.google.com/" in line or DRIVE.match(line):   # Drive folders/files and guide docs: explore them
+        from . import gdrive
+        db.kv_set(AWAIT_KEY, None)
+        return gdrive.explore(cid, line)
     if "whop.com" in line:
         return (f"That's the campaign page on Whop. I can't log in there, so open it, press **Ctrl+A**, **Ctrl+C** "
                 f"and paste the text here. Or send the creator's YouTube/Twitch channel: `!source {cid} <link>`.")
-    if DRIVE.match(line):
-        return ("That's a Google Drive folder. Sync it with Google Drive for Desktop, then send "
-                f"`!source {cid} \"G:\\My Drive\\<folder name>\"`.")
     try:
         reply = campaigns.add_source(cid, line)
     except ValueError as e:
@@ -227,6 +222,14 @@ def apply_brief(cid, text):
             except (ValueError, Exception) as e:
                 problems.append(f"{link[:80]} ({str(e)[:80]})")
     drive = sorted(set(m.group(0).rstrip(').,') for m in DRIVE.finditer(text)))
+    drive_notes = []
+    if drive:   # Drive folders/files on the page: explore them (guides inside, videos folders they point to)
+        from . import gdrive
+        for link in drive[:3]:
+            try:
+                drive_notes.append(gdrive.explore(cid, link))
+            except Exception as e:
+                problems.append(f"{link[:60]} ({str(e)[:80]})")
     try:   # the page's instructions become the campaign guide the AI follows
         from . import guide
         guide.add(cid, text)
@@ -246,9 +249,7 @@ def apply_brief(cid, text):
     if c["required_hashtags"] or c["credit"]:
         out.append("Every caption gets: " + " ".join(c["required_hashtags"] + ([c["credit"]] if c["credit"] else [])))
     out += [f"• {a}" for a in added]
-    if drive:
-        out.append("The footage is on Google Drive. Sync that folder with Google Drive for Desktop, then send "
-                   f"`!source {cid} \"G:\\My Drive\\<folder name>\"`:\n" + "\n".join(drive[:3]))
+    out += [n.split("\n", 1)[1] if "\n" in n else n for n in drive_notes]
     if problems:
         out.append("Couldn't use: " + "; ".join(problems[:3]))
     if has_content:

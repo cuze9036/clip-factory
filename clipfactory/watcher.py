@@ -248,6 +248,9 @@ def check_sources():
                     found += _twitch(c, s, cutoff, min_dur)
                 elif s["kind"] == "folder":
                     found += _folder(c, s, cfg.get("min_file_duration_s", 15))
+                elif s["kind"] == "gdrive":
+                    from . import gdrive
+                    found += gdrive.watch(c, s, cfg.get("min_file_duration_s", 15))
                 elif s["kind"] == "dropbox":
                     found += _dropbox(c, s, cfg.get("min_file_duration_s", 15))
                 else:

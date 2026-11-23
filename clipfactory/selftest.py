@@ -193,6 +193,14 @@ def _meta(platform):
     return check
 
 
+def _drive():
+    from . import gdrive
+    try:
+        return gdrive.selftest_line()
+    except gdrive.NeedsLogin as e:
+        raise _Skip(str(e))
+
+
 def _bugs():
     from . import bugreport
     if not bugreport.configured():
@@ -216,7 +224,7 @@ CHECKS = [
     ("Making a clip (first run downloads the speech model, about 500 MB)", _render),
     ("GPU", _gpu), ("Gmail audit watcher", _gmail), ("Offline alert", _heartbeat),
     ("Instagram posting", _meta("instagram")), ("Facebook posting", _meta("facebook")),
-    ("Bug reports to Claude Code", _bugs),
+    ("Bug reports to Claude Code", _bugs), ("Google Drive (private campaign folders)", _drive),
 ]
 
 

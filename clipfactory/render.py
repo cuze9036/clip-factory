@@ -159,14 +159,15 @@ def video_filter(layout, facecam, cfg, src):
             f"[b]scale=-2:{fg_h},crop='min(iw,{W})':{fg_h}[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[v0]")
 
 
-def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=None, accent=None, plan=None):
+def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=None, accent=None, plan=None,
+           captions=True):
     """style: one of styles.STYLE_NAMES (the researched viral looks, with effects from an edit plan);
     without it the older layouts are used. Returns {path, duration, plan}."""
     from . import styles
     cfg = config.section("render")
     raw, out = pathlib.Path(raw), pathlib.Path(out)
     if style in styles.STYLE_NAMES:
-        return _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg)
+        return _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg, captions)
     src = ffprobe(raw)
     dur = src["duration"]
     ass = out.with_suffix(".ass")
@@ -197,7 +198,7 @@ def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=
     return {"path": str(out), "duration": dur, "plan": None}
 
 
-def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg):
+def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg, captions=True):
     from . import effects, styles
     fonts = styles.ensure_fonts(config.path(cfg.get("fonts_dir", "assets/fonts")))
     src = ffprobe(raw)
@@ -207,6 +208,9 @@ def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, 
     if plan is None:
         plan = effects.auto_plan(words, dur, hook, style) if on else {}
     plan = effects.clean(plan, dur)
+    if not captions:   # their captions are already in the picture: no emojis or hook text over them either
+        plan["emojis"], plan["emphasis"] = [], []
+        plan.pop("hook", None)
     used = dict(plan)
     base = raw
     if plan["cuts"]:   # jump cuts first, then everything on the new timeline
@@ -220,7 +224,8 @@ def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, 
     if on and eff.get("face_tracking", True) and style in ("bold_crop", "word_pop"):
         faces = effects.face_track(base)
     ass = out.with_suffix(".ass")
-    ass.write_text(styles.build_ass(style, words, hook, dur, credit, accent or "#FFD400", plan), encoding="utf-8")
+    ass.write_text(styles.build_ass(style, words, hook, dur, credit, accent or "#FFD400", plan, captions),
+                   encoding="utf-8")
     vf = styles.video_filter(style, src, facecam, dur, plan, faces)
 
     inputs, n, chain = ["-i", str(base)], 1, "[v0]"

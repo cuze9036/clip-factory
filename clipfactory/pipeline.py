@@ -52,7 +52,24 @@ def _source_layout(v):
     return layout, json.loads(s["facecam"]) if s["facecam"] else None
 
 
-def pick_style(c, m, layout, face, clip):
+def want_captions(c, v, raw_path):
+    """Our captions or not: the campaign's setting (💬 on/off), else auto: off when the footage already has
+    captions burned in (checked once per video)."""
+    setting = campaigns._extra(c).get("captions", "auto")
+    if setting in ("on", "off"):
+        return setting == "on"
+    key = f"burned_captions:{c['id']}:{v['id'] if v else raw_path}"
+    known = db.kv_get(key)
+    if known is None:
+        from . import effects
+        known = effects.has_burned_captions(raw_path)
+        db.kv_set(key, known)
+        if known:
+            db.log(c["id"], f"{(v or {}).get('title', 'This video')} already has captions, so ours are left out")
+    return not known
+
+
+def pick_style(c, m, layout, face, clip, captions=True):
     """The edit style: a campaign's fixed choice, else one that fits the content (varied for the weekly review).
     'framed' / 'blur' set in config.yaml keep the older looks."""
     fixed = config.section("render").get("style", "auto")
@@ -61,6 +78,13 @@ def pick_style(c, m, layout, face, clip):
     db.kv_set(f"restyle:{clip['id']}", None)
     key = f"styles_used:{m['id']}"   # every remake / re-edit of this moment gets a style it hasn't had yet
     used = db.kv_get(key) or []
+    if not captions:   # footage with its own captions: show the whole frame so their text isn't cropped off
+        avoid = list(used) + ["bold_crop", "word_pop", "split"]
+        style = styles.choose(c["topic"], m["category"] or "", avoid=avoid)
+        if style in ("bold_crop", "word_pop", "split"):
+            style = "blur_box"
+        db.kv_set(key, (used + [style])[-5:])
+        return style
     style = styles.choose(c["topic"], m["category"] or "", facecam=bool(layout == "facecam_split" and face),
                           avoid=used)
     db.kv_set(key, (used + [style])[-5:])
@@ -75,9 +99,11 @@ def stage_render(c, limit=1):
             words = transcribe.words(clip["raw_path"])
             layout, face = _source_layout(v)
             final = clip["raw_path"].replace("_raw.mp4", "_final.mp4")
-            style = pick_style(c, m, layout, face, clip)
+            captions = want_captions(c, v, clip["raw_path"])
+            style = pick_style(c, m, layout, face, clip, captions)
             res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"],
-                                style=style, accent=styles.accent_for(c["topic"], m["category"] or ""))
+                                style=style, accent=styles.accent_for(c["topic"], m["category"] or ""),
+                                captions=captions)
             db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, style=?, plan=?, status='rendered' WHERE id=?",
                  res["path"], res["duration"], json.dumps(words), style,
                  json.dumps(res.get("plan"), ensure_ascii=False) if res.get("plan") else None, clip["id"])

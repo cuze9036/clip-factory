@@ -12,7 +12,7 @@ HELP = """**Clip Factory commands**
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
-`!queue` what goes out next, where and when · `!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
+`!captions <campaign> auto|on|off` our captions on that campaign's clips · `!queue` what goes out next, where and when · `!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -43,6 +43,7 @@ SLASH = {
     "add": ("Clip one video", "video link, then campaign id"),
     "find": ("Look for new campaigns now", None),
     "ai": ("Which AI did the work today (free models vs Gemini)", None),
+    "captions": ("Our captions for a campaign: auto / on / off", "campaign id, then auto, on or off"),
     "queue": ("What goes out next: where, when, and who posts it", None),
     "reedit": ("Make a clip again your way", "clip number, then what to change (optional)"),
     "remake": ("Edit a clip again in the current style, or all of them", "clip number, or: all"),
@@ -365,6 +366,10 @@ def handle(text):
             from . import discovery
             cid, ok = discovery.add_from_text(rest, origin="pasted")
             return None  # the suggestion message with buttons comes from the outbox
+        if cmd == "!captions":
+            cid, _ = _which(_resolve(args[0]) if args and campaigns.get(_resolve(args[0])) else None)
+            value = (args[-1].lower() if args else None)
+            return set_captions(cid, value) if cid else "Which campaign? `!captions <campaign id> auto|on|off`"
         if cmd == "!queue":
             return queue()
         if cmd == "!remake" and args and args[0].lower() == "all":
@@ -512,6 +517,23 @@ def pasted(cid, text):
     return brief(cid, text)
 
 
+def set_captions(cid, value=None):
+    """💬 Captions: auto (ours unless the footage already has captions) -> on -> off -> auto."""
+    import json as _json
+    c = campaigns.get(cid)
+    if not c:
+        return f"No campaign `{cid}`."
+    extra = campaigns._extra(c)
+    order = ["auto", "on", "off"]
+    value = value if value in order else order[(order.index(extra.get("captions", "auto")) + 1) % 3]
+    extra["captions"] = value
+    db.x("UPDATE campaigns SET notes=? WHERE id=?", _json.dumps(extra), cid)
+    db.kv_set("board_dirty", True)
+    meaning = {"auto": "added unless the footage already has captions",
+               "on": "always added", "off": "never added (the footage keeps its own text)"}[value]
+    return f"**{c['name']}**: our captions are {meaning}. New clips use this; `/remake all` redoes waiting ones."
+
+
 def card_button(kind, cid):
     """📋 Guide / 🎬 Footage / ⏸ Pause on a campaign card in #active-campaigns."""
     from . import guide, joinflow
@@ -583,6 +605,8 @@ def _button(custom_id):
         from . import reedit
         clip_id, op = rest.split(":")
         return reedit.apply(int(clip_id), op)
+    if kind == "cap":
+        return set_captions(rest)
     if kind in ("guide", "src", "pause"):
         return card_button(kind, rest)
     if kind == "join":

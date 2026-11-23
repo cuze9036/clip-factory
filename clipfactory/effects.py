@@ -254,6 +254,37 @@ def x_expr(points, crop_w_expr="ih*9/16"):
     return f"max(0,min(iw-{crop_w_expr},{expr}))"
 
 
+# ---------- text already burned into the video ----------
+
+def has_burned_captions(path, samples=8):
+    """True when the footage already shows captions: white text with a dark outline in the lower part of most
+    frames (the usual subtitle look). Then we don't add our own captions on top."""
+    try:
+        import cv2
+        import numpy as np
+        cap = cv2.VideoCapture(str(path))
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        hits = seen = 0
+        kernel = np.ones((5, 5), np.uint8)
+        for k in range(samples):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (k + 0.5) / samples))
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            seen += 1
+            h = frame.shape[0]
+            band = frame[int(h * 0.45):int(h * 0.95)]
+            white = np.all(band > 215, axis=2).astype(np.uint8)
+            dark = cv2.dilate(np.all(band < 45, axis=2).astype(np.uint8), kernel)
+            outlined = (white & dark).sum() / white.size
+            if outlined > 0.002:
+                hits += 1
+        cap.release()
+        return seen > 0 and hits / seen >= 0.5
+    except Exception:
+        return False
+
+
 # ---------- motion: zooms, shakes, flashes ----------
 
 def zoom_expr(plan, duration, push=0.06):

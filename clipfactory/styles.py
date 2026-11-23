@@ -163,8 +163,10 @@ LOOK = {
 }
 
 
-def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=None):
+def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=None, captions=True):
     plan = plan or {}
+    if not captions:   # the footage already has its own captions: don't add ours on top
+        words = []
     emphasis = set(plan.get("emphasis") or [])
     look = LOOK[style]
     acc = ass_colour(accent)

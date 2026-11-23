@@ -193,7 +193,8 @@ def plan(max_ai=5):
         total_usd += st["earned"]
         running.append({"key": f"running:c:{c['id']}", "tier": "running",
                         "buttons": [["📋 Guide", f"guide:{c['id']}", "grey"], ["🎬 Footage", f"src:{c['id']}", "grey"],
-                                    ["▶ Resume" if c["paused"] else "⏸ Pause", f"pause:{c['id']}", "grey"]],
+                                    ["▶ Resume" if c["paused"] else "⏸ Pause", f"pause:{c['id']}", "grey"],
+                                    ["💬 Captions: " + campaigns._extra(c).get("captions", "auto"), f"cap:{c['id']}", "grey"]],
                         "text": card(c, "running", effort(c, allow_ai=False))})
     running.append({"key": "running:summary", "tier": "summary", "buttons": [], "text": (
         f"**Active campaigns** · {now:%b %d, %I:%M %p} ET\n"

@@ -91,5 +91,30 @@ class EffectsTest(unittest.TestCase):
         self.assertEqual(sorted(streams), ["audio", "video"])
 
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "needs FFmpeg")
+    def test_footage_with_its_own_captions_gets_none_of_ours(self):
+        from clipfactory import campaigns, commands, db, effects, pipeline, styles
+        plain = os.path.join(self.tmp.name, "plain.mp4")
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1280x720:r=10:d=3",
+                        "-c:v", "libx264", "-preset", "ultrafast", plain], check=True)
+        boxed = os.path.join(self.tmp.name, "boxed.mp4")
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", plain, "-vf",
+                        "drawtext=text='THE CROWD WENT WILD':fontcolor=white:fontsize=72:borderw=6:bordercolor=black:"
+                        "x=(w-tw)/2:y=h*0.72", "-c:v", "libx264", "-preset", "ultrafast", boxed], check=True)
+        self.assertTrue(effects.has_burned_captions(boxed))
+        self.assertFalse(effects.has_burned_captions(plain))
+        db._local.__dict__.clear()
+        cid = campaigns.suggest({"name": "Band Live", "platforms": ["instagram"], "rate_per_1k": 2}, "pasted")
+        c = campaigns.get(cid)
+        self.assertFalse(pipeline.want_captions(c, {"id": "v1", "title": "t"}, boxed))
+        style = pipeline.pick_style(c, {"id": 1, "category": "funny"}, "blur", None, {"id": 1}, captions=False)
+        self.assertNotIn(style, ("bold_crop", "word_pop", "split"))   # the whole frame stays visible
+        self.assertIn("never added", commands.set_captions(cid, "off"))
+        self.assertFalse(pipeline.want_captions(campaigns.get(cid), {"id": "v2", "title": "t"}, plain))
+        ass = styles.build_ass("blur_box", [{"w": "hello", "s": 0.1, "e": 0.4}], "Hook", 2.0, captions=False)
+        self.assertNotIn("HELLO", ass)
+        self.assertIn("Hook", ass)                                        # the title box stays
+
+
 if __name__ == "__main__":
     unittest.main()

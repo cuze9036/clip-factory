@@ -175,7 +175,7 @@ def _clean(c):
     tags = c.get("required_hashtags") or []
     if isinstance(tags, str):
         tags = tags.split()
-    tags = ["#" + t.lstrip("#") for t in tags if t.strip("#")]
+    tags = ["#" + t.lstrip("#") for t in tags if t.strip("#") and not t.lstrip("#").startswith("@")]   # @handles go in the credit
     platforms = [p for p in (c.get("platforms") or ["youtube"]) if p in POSTABLE] or ["youtube"]
     rules = c.get("rules") or []
     if isinstance(rules, str):

@@ -210,6 +210,8 @@ def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=No
     handle = short_credit(credit)
     if handle:
         cy = look["credit_y"]
+        if not captions and style in ("bold_crop", "word_pop", "split"):
+            cy = 200   # the footage's own captions sit in the lower third: keep the handle clear of them
         colour = acc if style in ("bold_crop", "word_pop", "split") else "&H00FFFFFF&"
         ev.append(f"Dialogue: 1,{_t(0)},{_t(duration)},Credit,,0,0,0,,{{\\an5\\pos(540,{cy})\\c{colour}}}{handle}")
     y, pop = look["cap_y"], look["pop"]

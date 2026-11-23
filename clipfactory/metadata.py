@@ -60,6 +60,7 @@ def finalize(meta, campaign):
     # The paid-promotion tag is not stored here: publishing puts it on the first line of every caption.
     tag = disclosure_tag(campaign, meta["hashtags"])
     tags = list(dict.fromkeys(list(campaign["required_hashtags"]) + meta["hashtags"]))
+    tags = [t for t in tags if not str(t).lstrip("#").startswith("@")]   # @handles belong to the credit line
     if tag:
         tags = [t for t in tags if not DISCLOSURE.match(str(t))]
     tags = tags[:6]

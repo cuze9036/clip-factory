@@ -246,6 +246,8 @@ def apply_brief(cid, text, quiet=False):
     for f in ("rate_per_1k", "budget_left", "max_payout_per_clip", "min_views", "ends", "credit", "topic"):
         if data.get(f) not in (None, ""):
             sets[f] = data[f]
+    if data.get("required_hashtags"):   # an @handle is a credit, not a hashtag ("#@Mykitsch")
+        data["required_hashtags"] = [t for t in data["required_hashtags"] if not str(t).lstrip("#").startswith("@")]
     for f in ("platforms", "required_hashtags", "rules"):
         if data.get(f):
             sets[f] = json.dumps(data[f])

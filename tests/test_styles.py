@@ -94,6 +94,22 @@ class StylesTest(unittest.TestCase):
                                    capture_output=True, text=True)
                 self.assertEqual(r.returncode, 0, f"{style} on {w}x{h}: {r.stderr[-300:]}")
 
+    def test_handle_moves_up_when_the_footage_has_its_own_captions(self):
+        from clipfactory import styles
+        def credit_y(captions):
+            line = [ln for ln in styles.build_ass("bold_crop", [], None, 5, "@mykitsch on Instagram", captions=captions)
+                    .splitlines() if ln.startswith("Dialogue") and ",Credit," in ln][0]
+            return int(line.split("\pos(540,")[1].split(")")[0])
+        self.assertEqual(credit_y(True), 1390)
+        self.assertLess(credit_y(False), 400)
+
+    def test_a_handle_is_never_a_hashtag(self):
+        from clipfactory import metadata
+        c = {"required_hashtags": ["#@Mykitsch", "#Kitsch"], "credit": "@mykitsch", "rate_per_1k": 1.5}
+        meta = metadata.finalize({"titles": ["t"], "description": "d", "hashtags": ["#NicVans", "#@kitsch"]}, c)
+        self.assertEqual(meta["hashtags"], ["#Kitsch", "#NicVans"])
+        self.assertNotIn("#@", meta["description"])
+
     def test_short_credit_and_clean_title(self):
         from clipfactory import styles
         self.assertEqual(styles.short_credit("Credit: @mby on Instagram & YouTube, @mbyclips on TikTok"), "@mby")

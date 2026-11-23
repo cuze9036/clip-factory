@@ -124,7 +124,9 @@ def card(c, t, eff):
             nums.append(f"~{_money(c['budget_left'] / clippers)} each")
     if c["max_payout_per_clip"]:
         nums.append(f"max {_money(c['max_payout_per_clip'])}/clip")
-    head = "⏸ PAUSED" if t == "running" and c["paused"] else TIERS[t]
+    waiting = t == "running" and c.get("stage") == "suggested"   # joined, but no footage yet
+    head = ("⏳ JOINED, NOT RUNNING YET" if waiting else "⏸ PAUSED" if t == "running" and c["paused"]
+            else TIERS[t])
     lines = [f"**{head}**", f"**{_short_name(c['name'])}**", " · ".join(nums)]
     if eff:
         lines.append(f"Effort: {EFFORT_ICON[eff['effort']]}" + (f" · {eff['why']}" if eff.get("why") else ""))
@@ -140,6 +142,9 @@ def card(c, t, eff):
         srcs = campaigns.sources(c["id"])
         lines.append("Footage: " + (", ".join(x["kind"].replace("_", " ") for x in srcs) if srcs
                                     else "none yet, tap 🎬 Footage"))
+        if waiting:
+            lines.append("Next: paste the Whop campaign page here (Ctrl+A, Ctrl+C), or tap 🎬 Footage and send the "
+                         "footage links. The lane starts by itself.")
         lines.append(f"id `{c['id']}`")
     else:
         _, reasons = campaigns.fit(c)
@@ -150,10 +155,19 @@ def card(c, t, eff):
     return "\n".join(lines)[:1900]
 
 
+def joined_waiting(c):
+    """You tapped "I joined" but the lane hasn't started (no footage yet)."""
+    return c.get("stage") == "suggested" and bool(campaigns._extra(c).get("joined_at"))
+
+
 def _running():
-    """Lanes the tool is running. Template lanes from campaigns.yaml count once they have videos."""
+    """Lanes the tool is running, plus campaigns you joined that still wait for footage.
+    Template lanes from campaigns.yaml count once they have videos."""
     out = []
     for c in campaigns.all_campaigns():
+        if joined_waiting(c):
+            out.append(c)
+            continue
         if campaigns.lane_state(c) not in ("running", "paused") or c.get("stage") != "active":
             continue
         if c.get("origin") == "yaml" and not db.one("SELECT 1 FROM videos WHERE campaign_id=?", c["id"]):
@@ -168,7 +182,7 @@ def plan(max_ai=5):
     from . import joinflow
     asked = 0
     live = []
-    for c in _dedupe(joinflow.live_campaigns()):
+    for c in _dedupe([c for c in joinflow.live_campaigns() if not joined_waiting(c)]):
         need_ai = not campaigns._extra(c).get("effort")
         eff = effort(c, allow_ai=need_ai and asked < max_ai)
         if need_ai and asked < max_ai:
@@ -187,7 +201,7 @@ def plan(max_ai=5):
 
     running = []
     total_views = total_usd = 0
-    for c in sorted(_running(), key=lambda c: -(c["rate_per_1k"] or 0)):
+    for c in sorted(_running(), key=lambda c: (joined_waiting(c), -(c["rate_per_1k"] or 0))):
         st = campaigns.lane_stats(c)
         total_views += st["views"]
         total_usd += st["earned"]
@@ -198,7 +212,10 @@ def plan(max_ai=5):
                         "text": card(c, "running", effort(c, allow_ai=False))})
     running.append({"key": "running:summary", "tier": "summary", "buttons": [], "text": (
         f"**Active campaigns** · {now:%b %d, %I:%M %p} ET\n"
-        f"▶ {len(running)} running · {total_views:,} views · ~${total_usd:,.2f} earned"
+        f"▶ {sum(1 for r in running if 'NOT RUNNING YET' not in r['text'])} running"
+        + (f" · ⏳ {sum(1 for r in running if 'NOT RUNNING YET' in r['text'])} waiting for footage"
+           if any('NOT RUNNING YET' in r['text'] for r in running) else "")
+        + f" · {total_views:,} views · ~${total_usd:,.2f} earned"
         + ("" if len(running) else "\nNothing running yet. Join one from #campaign-updates."))})
     return {"live": items, "running": running}
 

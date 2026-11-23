@@ -122,6 +122,7 @@ def joined(cid):
     db.x("UPDATE campaigns SET notes=? WHERE id=?", json.dumps(extra), cid)
     expect(cid, "brief", AWAIT_MINUTES)
     db.log(cid, "You joined this campaign")
+    db.kv_set("board_dirty", True)   # it moves to #active-campaigns right away
     return (f"Nice, you joined **{c['name']}**.\n"
             "Last step: on the Whop campaign page press **Ctrl+A**, then **Ctrl+C**, and paste it here "
             "(no command needed; a long paste turns into a file, that's fine).\n"

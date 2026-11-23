@@ -104,6 +104,21 @@ class BoardTest(unittest.TestCase):
         self.assertIn(f"id `{run}`", active[0]["text"])
         self.assertIn("1 running", active[1]["text"])
 
+    def test_joined_campaign_shows_in_active_at_once(self):
+        from clipfactory import campaigns, joinflow
+        cid = self._found("Joined One")
+        joinflow.joined(cid)
+        items, _ = self._plan()
+        self.assertEqual([i["key"] for i in items], ["live:summary"])
+        active, _ = self._plan(kind="running")
+        self.assertEqual([i["key"] for i in active], [f"running:c:{cid}", "running:summary"])
+        self.assertIn("JOINED, NOT RUNNING YET", active[0]["text"])
+        self.assertIn("1 waiting for footage", active[1]["text"])
+        self.assertIn("0 running", active[1]["text"])
+        campaigns.activate(cid)
+        active, _ = self._plan(kind="running")
+        self.assertTrue(active[0]["text"].startswith("**▶ RUNNING**"))
+
     def test_template_lanes_without_videos_are_not_shown(self):
         from clipfactory import campaigns
         campaigns.save("streamer-gta6", {"name": "Streamer GTA 6 clips", "platforms": ["youtube"]}, "yaml")

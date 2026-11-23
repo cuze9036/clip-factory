@@ -310,6 +310,7 @@ def activate(cid):
         except (Exception, SystemExit) as e:
             db.log(cid, f"Could not add {v}: {e}", "error")
     db.log(cid, "Campaign activated")
+    db.kv_set("board_dirty", True)
     return get(cid)
 
 

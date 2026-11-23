@@ -139,6 +139,9 @@ def card(c, t, eff):
         g = guide.get(c)
         lines.append(f"Guide: {len(g['do'])} do · {len(g['avoid'])} avoid" if g["do"] or g["avoid"]
                      else "Guide: none yet, tap 📋 Guide and paste the campaign's instructions")
+        from . import check
+        if check.card_line(c):
+            lines.append(check.card_line(c))
         srcs = campaigns.sources(c["id"])
         lines.append("Footage: " + (", ".join(x["kind"].replace("_", " ") for x in srcs) if srcs
                                     else "none yet, tap 🎬 Footage"))

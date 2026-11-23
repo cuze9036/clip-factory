@@ -77,7 +77,7 @@ llm:
   text_order: [free-llm, gemini, ollama]
   # With ANTHROPIC_API_KEY set, Claude does only these thinking tasks (first), within its daily budget;
   # without the key, or once the budget is used up, the free AI does them.
-  claude_tasks: [video_plan, reedit, insights, campaign_guide, diagnose]
+  claude_tasks: [video_plan, reedit, insights, campaign_guide, campaign_check, diagnose]
   providers:
     - name: claude
       type: anthropic

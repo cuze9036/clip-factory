@@ -16,6 +16,11 @@ def _due(key, minutes):
 
 
 def stage_analyze(c, limit=1):
+    from . import check
+    if not db.one("SELECT 1 FROM videos WHERE campaign_id=? AND status='new'", c["id"]):
+        return
+    if not check.ready(c):   # read the whole campaign first; only then watch its videos
+        return
     for v in db.q("SELECT * FROM videos WHERE campaign_id=? AND status='new' ORDER BY created_at LIMIT ?", c["id"], limit):
         db.x("UPDATE videos SET status='analyzing' WHERE id=? AND campaign_id=?", v["id"], c["id"])
         try:

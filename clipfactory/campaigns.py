@@ -239,6 +239,10 @@ def sync(path=None):
 
 def set_paused(campaign_id, paused):
     db.x("UPDATE campaigns SET paused=? WHERE id=?", int(paused), campaign_id)
+    db.kv_set("board_dirty", True)
+    if not paused:
+        from . import check
+        check.override(campaign_id)   # resuming a campaign the check said no to runs it anyway
     db.log(campaign_id, "Lane paused" if paused else "Lane resumed")
 
 

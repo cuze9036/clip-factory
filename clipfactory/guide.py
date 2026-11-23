@@ -97,6 +97,9 @@ def add(cid, text):
     for k, cap in (("do", 15), ("avoid", 10)):
         g[k] = list(dict.fromkeys(g[k] + data[k]))[:cap]
     extra["guide"] = g
+    old = extra.get("guide_text") or ""
+    if text.strip() and text.strip()[:2000] not in old:   # the full text, for the campaign check
+        extra["guide_text"] = (old + "\n\n" + text.strip())[-60000:].strip()
     db.x("UPDATE campaigns SET notes=? WHERE id=?", json.dumps(extra), cid)
     tags = list(dict.fromkeys(c["required_hashtags"] + data["hashtags"]))
     if tags != c["required_hashtags"]:

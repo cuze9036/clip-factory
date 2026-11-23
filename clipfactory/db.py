@@ -76,6 +76,7 @@ MIGRATIONS = [
     ("clips", "plan", "TEXT"),
     ("moments", "plan", "TEXT"),
     ("videos", "report", "TEXT"),
+    ("videos", "language", "TEXT"),
 ]
 
 _local = threading.local()

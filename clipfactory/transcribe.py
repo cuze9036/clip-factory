@@ -36,6 +36,24 @@ def _use_nvidia_libs():
     return bool(dirs)
 
 
+_multi = None
+
+
+def _get_multi():
+    """A multilingual model (for speech that isn't English): it hears any language and writes English."""
+    global _multi
+    if _multi is None:
+        _use_nvidia_libs()
+        from faster_whisper import WhisperModel
+        cfg = config.section("whisper")
+        device = cfg.get("device", "auto")
+        if device == "auto" and db.kv_get("whisper_cpu_only"):
+            device = "cpu"
+        _multi = WhisperModel(cfg.get("multilingual_model", "small"), device=device,
+                              compute_type=cfg.get("compute_type", "int8"))
+    return _multi
+
+
 def _get():
     global _model
     if _model is None:
@@ -52,7 +70,7 @@ def _get():
 
 
 def _run(fn):
-    global _model
+    global _model, _multi
     try:
         return fn(_get())
     except (RuntimeError, OSError) as e:
@@ -60,20 +78,27 @@ def _run(fn):
             raise
         db.kv_set("whisper_cpu_only", True)
         db.log(None, f"GPU speech libraries not usable ({str(e)[:80]}); captions now run on the CPU", "warn")
-        _model = None
+        _model = _multi = None
         return fn(_get())
 
 
-def segments(path):
+def _opts(translate):
+    # English speech: the fast English model. Other languages: translated into English captions.
+    return {"task": "translate"} if translate else {"language": "en"}
+
+
+def segments(path, translate=False):
     def go(model):
-        segs, _ = model.transcribe(str(path), language="en", vad_filter=True)
+        m = _get_multi() if translate else model
+        segs, _ = m.transcribe(str(path), vad_filter=True, **_opts(translate))
         return [{"start": s.start, "end": s.end, "text": s.text} for s in segs]
     return _run(go)
 
 
-def words(path):
+def words(path, translate=False):
     def go(model):
-        segs, _ = model.transcribe(str(path), language="en", vad_filter=True, word_timestamps=True)
+        m = _get_multi() if translate else model
+        segs, _ = m.transcribe(str(path), vad_filter=True, word_timestamps=True, **_opts(translate))
         out = []
         for s in segs:
             for w in s.words or []:

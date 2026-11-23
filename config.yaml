@@ -12,7 +12,9 @@ watcher:
   dropbox_max_gb: 20
 
 moments:
-  english_only: true              # skip videos whose speech isn't English (campaigns target US viewers)
+  english_only: false             # true = skip videos whose speech isn't English. With false, other languages are
+                                  # used too (captions and titles are always English), unless a campaign's
+                                  # rules or guide say English only.
   route: auto                     # auto = Gemini watches the YouTube URL, falls back to transcript
   chunk_minutes: 30               # Gemini watches long streams in chunks of this size
   fps: 0.5                        # frames per second Gemini samples (lower = fewer tokens)
@@ -26,6 +28,7 @@ download:
 
 whisper:
   model: small.en                 # large-v3 is better but slow without a GPU
+  multilingual_model: small       # for speech in other languages: heard as-is, written as English captions
   device: auto
   compute_type: int8
 

@@ -112,7 +112,7 @@ def loudness_per_second(path):
 
 def via_transcript(v, c):
     audio = _audio_file(v)
-    segs = transcribe.segments(audio)
+    segs = transcribe.segments(audio, translate=(v.get("language") or "en") != "en")
     loud = loudness_per_second(audio)
     total = v["duration_s"] or len(loud)
     base = float(np.median(loud)) if len(loud) else -40.0
@@ -159,15 +159,17 @@ def analyze(v, c):
     if used is None:
         raw, provider = via_transcript(v, c)
         used = "transcript"
-    if config.section("moments").get("english_only", True) and raw:
-        other = [m["language"] for m in raw if m.get("language", "en") != "en"]
-        if len(other) * 2 > len(raw):
-            lang = max(set(other), key=other.count)
+    other = [m["language"] for m in raw or [] if m.get("language", "en") != "en"]
+    if other and len(other) * 2 > len(raw):
+        from .analyst import english_only
+        lang = max(set(other), key=other.count)
+        db.x("UPDATE videos SET language=? WHERE id=? AND campaign_id=?", lang, v["id"], c["id"])
+        if english_only(c):
             db.x("UPDATE videos SET status='skipped', route=?, analyzed_at=?, error=? WHERE id=? AND campaign_id=?",
                  used, iso(utcnow()), f"not English ({lang})", v["id"], c["id"])
             from . import notify
             notify.send("progress", f"Skipped \"{v['title']}\" ({c['name']}): the speech is not English ({lang}). "
-                        "Clips are only made from English videos for US viewers.", campaign_id=c["id"])
+                        "This campaign wants English only.", campaign_id=c["id"])
             db.log(c["id"], f"Skipped {v['title']}: not English ({lang})")
             return []
     picks = _shape(raw, c, v["duration_s"])

@@ -19,7 +19,8 @@ from .util import fmt_ts, iso, parse_ts, utcnow
 WATCH_PROMPT = """You are watching part of a {kind} ({start} to {end} of {total}) that will be cut into short
 vertical clips for US viewers. Campaign topic: {topic}.{rules}
 
-Watch carefully, both picture and sound. Describe what is really there. Times are absolute timestamps in the
+Watch carefully, both picture and sound. Describe what is really there. Write everything in English, even
+when the speech is in another language. Times are absolute timestamps in the
 video (MM:SS or HH:MM:SS).
 
 Return JSON only:
@@ -43,6 +44,8 @@ Rules for every clip:
 - {min_len}-{max_len} seconds; start ON the action or the strongest line (no setup), end right after the payoff.
 - Each clip must make sense on its own and must not overlap another clip.
 - Follow the campaign rules and guide above exactly. Skip anything they forbid.
+- Write every hook, title and note in English, even when the speech is in another language (the transcript is
+  already translated to English; the captions will be English too).
 - Only plan clips that are genuinely strong (score 1-10, be strict). At most {limit} clips.
 - Edit plan times are seconds from the START OF THE CLIP. Keep effects purposeful: punch zooms on the 1-3
   biggest beats, at most one flash, emojis only where they fit, cut dead air inside the clip.
@@ -154,7 +157,7 @@ def watch(v, c):
 
 def _transcript(v, limit_chars=60000):
     from .moments import _audio_file
-    segs = transcribe.segments(_audio_file(v))
+    segs = transcribe.segments(_audio_file(v), translate=(v.get("language") or "en") != "en")
     text = "\n".join(f"[{fmt_ts(s['start'])}] {s['text'].strip()}" for s in segs)
     return text[:limit_chars], segs
 
@@ -219,14 +222,30 @@ def to_effects(edit, words_hint=None):
     return out
 
 
+ENGLISH_ONLY = re.compile(r"english[ -]?(only|speaking|language)|only (in )?english|must be (in )?english|"
+                          r"english (audio|speech|content) (only|required)", re.I)
+
+
+def english_only(c):
+    """True when the tool or this campaign's rules/guide ask for English-speaking footage only."""
+    from . import guide
+    if config.section("moments").get("english_only", False):
+        return True
+    text = " ".join(list(c.get("rules") or []) + guide.lines(c) + [c.get("audience") or ""])
+    return bool(ENGLISH_ONLY.search(text))
+
+
 def analyze(v, c):
     report, how = watch(v, c)
-    if config.section("moments").get("english_only", True) and report.get("language", "en") != "en":
+    lang = report.get("language", "en") or "en"
+    db.x("UPDATE videos SET language=? WHERE id=? AND campaign_id=?", lang, v["id"], c["id"])
+    v = {**v, "language": lang}
+    if english_only(c) and lang != "en":
         lang = report["language"]
         db.x("UPDATE videos SET status='skipped', route=?, analyzed_at=?, error=? WHERE id=? AND campaign_id=?",
              "analyst", iso(utcnow()), f"not English ({lang})", v["id"], c["id"])
-        notify.send("progress", f"Skipped \"{v['title']}\" ({c['name']}): the speech is not English ({lang}).",
-                    campaign_id=c["id"])
+        notify.send("progress", f"Skipped \"{v['title']}\" ({c['name']}): the speech is not English ({lang}) and "
+                    "this campaign wants English only.", campaign_id=c["id"])
         return []
     planned, provider = plan(v, c, report)
     strong = [x for x in planned["clips"] if x["score"] >= c["min_score"]]
@@ -258,6 +277,8 @@ def post_report(v, c, report, how, planned, kept, provider):
         lines.append(f"About: {report['summary'][:400]}")
     if report.get("on_screen_text"):
         lines.append("Text is already on screen, so our captions stay off.")
+    if (v.get("language") or "en") != "en":
+        lines.append(f"Speech is in '{v['language']}': captions and titles will be in English.")
     if planned.get("thinking"):
         lines.append(f"Editor ({provider}): {planned['thinking'][:500]}")
     if kept:

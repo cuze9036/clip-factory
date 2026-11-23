@@ -120,7 +120,7 @@ def stage_render(c, limit=1):
         m = db.one("SELECT * FROM moments WHERE id=?", clip["moment_id"])
         v = db.one("SELECT * FROM videos WHERE id=? AND campaign_id=?", m["video_id"], c["id"])
         try:
-            words = transcribe.words(clip["raw_path"])
+            words = transcribe.words(clip["raw_path"], translate=((v or {}).get("language") or "en") != "en")
             layout, face = _source_layout(v)
             final = clip["raw_path"].replace("_raw.mp4", "_final.mp4")
             captions = want_captions(c, v, clip["raw_path"])

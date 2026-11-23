@@ -91,6 +91,37 @@ class EffectsTest(unittest.TestCase):
         self.assertEqual(sorted(streams), ["audio", "video"])
 
 
+    def test_soft_shadow_captions_are_seen_but_a_hud_is_not(self):
+        import cv2
+        import numpy as np
+        from clipfactory import effects
+
+        def video(name, draw):
+            path = os.path.join(self.tmp.name, name)
+            out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), 10, (540, 960))
+            for i in range(40):
+                f = np.full((960, 540, 3), (60, 110, 160), np.uint8)
+                draw(f, i)
+                out.write(f)
+            out.release()
+            return path
+
+        def subtitle(f, i):   # white words with a soft drop shadow, centred, changing every few frames
+            if i % 10 < 7:
+                text = ["THIS IS CUTE", "COME OUTSIDE", "YOU DID ALL THIS", "MOTHER"][i // 10]
+                (w, _), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_DUPLEX, 1.4, 3)
+                x = (540 - w) // 2
+                cv2.putText(f, text, (x + 3, 763), cv2.FONT_HERSHEY_DUPLEX, 1.4, (25, 25, 25), 5)
+                cv2.putText(f, text, (x, 760), cv2.FONT_HERSHEY_DUPLEX, 1.4, (255, 255, 255), 3)
+
+        def hud(f, i):   # a game score box in the corner, same every frame
+            cv2.rectangle(f, (10, 880), (150, 940), (20, 20, 20), -1)
+            cv2.putText(f, "HP 100", (18, 922), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 2)
+
+        self.assertTrue(effects.has_burned_captions(video("subs.mp4", subtitle)))
+        self.assertFalse(effects.has_burned_captions(video("hud.mp4", hud)))
+        self.assertFalse(effects.has_burned_captions(video("plain.mp4", lambda f, i: None)))
+
     @unittest.skipUnless(shutil.which("ffmpeg"), "needs FFmpeg")
     def test_footage_with_its_own_captions_gets_none_of_ours(self):
         from clipfactory import campaigns, commands, db, effects, pipeline, styles

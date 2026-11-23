@@ -77,6 +77,15 @@ class AnalystTest(unittest.TestCase):
         self.assertIn("1 clip(s) planned", msg)
         self.assertIn("Live concert; the fall is the clear peak.", msg)
 
+    def test_planned_clips_keep_the_campaign_length(self):
+        from clipfactory import analyst
+        c = {"min_len": 12, "max_len": 30, "max_moments_per_video": 4}
+        clip = {"score": 9, "hook": "Big reveal", "why": "funny", "category": "funny"}
+        d = analyst._plan_validator(c, 69)({"clips": [dict(clip, start="0:35", end="0:44"),   # 9 s -> 12 s
+                                                      dict(clip, start="0:00", end="0:50"),   # 50 s -> 30 s
+                                                      dict(clip, start="1:02", end="1:06")]}) # only 7 s left: dropped
+        self.assertEqual([(x["start"], x["end"]) for x in d["clips"]], [(35, 47), (0, 30)])
+
     def test_director_plan_becomes_an_effects_plan(self):
         from clipfactory import pipeline
         m = {"plan": json.dumps({"zooms": [{"t": 1.0, "scale": 1.2, "dur": 0.6}], "emphasis_words": ["insane"]}),

@@ -174,6 +174,17 @@ def _plan_validator(c, total):
                 continue
             if e <= s or s < 0 or (total and s > total):
                 continue
+            # The campaign's clip length (e.g. 12-30 s) is a rule: stretch the end or cut it; the start stays where
+            # the director put it, so the edit's clip-relative times still fit.
+            lo, hi = float(c["min_len"] or 0), float(c["max_len"] or 0)
+            if hi and e - s > hi:
+                e = s + hi
+            if lo and e - s < lo:
+                e = s + lo
+            if total:
+                e = min(e, total)
+            if lo and e - s < lo * 0.75:
+                continue
             hook, why = str(x.get("hook") or "")[:60], str(x.get("why") or "")[:300]
             llm.require_english(hook, why)
             cat = str(x.get("category") or "").lower()

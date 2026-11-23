@@ -256,9 +256,11 @@ def x_expr(points, crop_w_expr="ih*9/16"):
 
 # ---------- text already burned into the video ----------
 
-def has_burned_captions(path, samples=8):
-    """True when the footage already shows captions: white text with a dark outline in the lower part of most
-    frames (the usual subtitle look). Then we don't add our own captions on top."""
+def has_burned_captions(path, samples=12):
+    """True when the footage already shows captions: white text with a dark outline or a soft drop shadow, centred
+    and spread across the lower part of the frame (the usual subtitle look), in enough frames. Captions come and go
+    with speech, so a third of the frames is enough; game HUDs and white clothes sit off-centre or are too narrow.
+    Then we don't add our own captions on top."""
     try:
         import cv2
         import numpy as np
@@ -275,12 +277,17 @@ def has_burned_captions(path, samples=8):
             h = frame.shape[0]
             band = frame[int(h * 0.45):int(h * 0.95)]
             white = np.all(band > 215, axis=2).astype(np.uint8)
-            dark = cv2.dilate(np.all(band < 45, axis=2).astype(np.uint8), kernel)
-            outlined = (white & dark).sum() / white.size
-            if outlined > 0.002:
+            gray = cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
+            shadow = (cv2.GaussianBlur(gray, (31, 31), 0).astype(int) - gray) > 40   # darker than its surroundings
+            edge = cv2.dilate((np.all(band < 45, axis=2) | shadow).astype(np.uint8), kernel)
+            text = white & edge
+            if text.sum() / text.size <= 0.0015:
+                continue
+            xs = np.nonzero(text)[1] / text.shape[1]
+            if abs(xs.mean() - 0.5) < 0.12 and np.percentile(xs, 95) - np.percentile(xs, 5) > 0.15:
                 hits += 1
         cap.release()
-        return seen > 0 and hits / seen >= 0.5
+        return seen > 0 and hits / seen >= 0.3
     except Exception:
         return False
 

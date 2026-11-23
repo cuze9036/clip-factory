@@ -373,6 +373,15 @@ def run_manual():
     now = utcnow()
     horizon = iso(now + dt.timedelta(hours=cfg.get("deliver_hours_before", 24)))
     remind_at = dt.timedelta(minutes=cfg.get("remind_minutes_before", 30))
+    # A platform that can now post by itself (keys added, or YouTube no longer hand-posted): its queued posts
+    # that weren't announced yet switch to automatic.
+    for post in db.q("SELECT * FROM posts WHERE status='queued' AND mode='manual' AND reminded_at IS NULL"):
+        if post["platform"] not in (config.get().get("always_manual") or []) and \
+                post["platform"] in UPLOADERS and _has_keys(post["platform"], post["account"]):
+            db.x("UPDATE posts SET mode='auto' WHERE id=?", post["id"])
+            if post.get("delivered_at"):
+                db.log(post["campaign_id"], f"Post {post['id']} ({post['platform']}) now goes out by itself; "
+                       "ignore the copy on Telegram")
     for post in db.q("SELECT * FROM posts WHERE status='queued' AND scheduled_at <= ? ORDER BY scheduled_at", horizon):
         if not is_manual(post):
             continue

@@ -75,17 +75,21 @@ class ManualPostingTest(unittest.TestCase):
         self._post("x", 40)
         self._run().assert_not_called()
 
-    def test_youtube_until_audit_is_not_uploaded(self):
+    def test_waiting_youtube_post_switches_to_automatic(self):
+        from clipfactory import db, publish
+        pid = self._post("youtube", 5)                            # was planned as a hand-post
+        with mock.patch.object(publish, "_has_keys", return_value=True):
+            self._run()
+        row = db.one("SELECT mode FROM posts WHERE id=?", pid)
+        self.assertEqual(row["mode"], "auto")                     # now YouTube uploads it by itself
+
+    def test_announced_hand_post_stays_with_you(self):
         from clipfactory import db, publish
         pid = self._post("youtube", 5)
-        db.x("UPDATE posts SET mode='auto' WHERE id=?", pid)     # scheduled before always_manual existed
-        with mock.patch.object(publish, "youtube_upload") as up:
+        db.x("UPDATE posts SET reminded_at='2026-01-01T00:00:00Z' WHERE id=?", pid)
+        with mock.patch.object(publish, "_has_keys", return_value=True):
             self._run()
-            with mock.patch.object(publish, "run_manual"):
-                publish.run_due()
-        up.assert_not_called()
-        self.assertTrue(db.one("SELECT delivered_at FROM posts WHERE id=?", pid)["delivered_at"])
-
+        self.assertEqual(db.one("SELECT mode FROM posts WHERE id=?", pid)["mode"], "manual")
 
 if __name__ == "__main__":
     unittest.main()

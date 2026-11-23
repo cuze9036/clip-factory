@@ -101,7 +101,7 @@ schedule:
   max_posts_per_account_per_day: 5
   min_gap_minutes: 120
   slot_jitter_min: 12             # each post goes out at a random time up to 12 min before/after its slot
-  youtube_uploads_per_day: 6      # default API quota allows about 6
+  youtube_uploads_per_day: 10     # an upload costs 100 quota units of the default 10,000 a day (Google, 2026)
 
 stats:
   every_hours: 6
@@ -172,8 +172,7 @@ manual_posting:                   # clips you post by hand
   deliver_hours_before: 24        # video + caption reach Telegram this long before the posting time
   remind_minutes_before: 30       # Discord reminds you this long before the posting time
 owner_timezone: Asia/Kolkata      # reminders show this time next to US Eastern
-always_manual: [youtube]          # YouTube API uploads stay private until Google's audit passes, so you post
-                                  # YouTube Shorts yourself for now. Remove youtube here once the audit is approved.
+always_manual: []                 # platforms you always post by hand even when the API works
 
 graph_api_version: v21.0
 

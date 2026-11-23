@@ -349,12 +349,12 @@ def handle(text):
                 return "Send `!source <campaign number> <YouTube/Twitch channel, video link or folder>`."
             cid = _resolve(args[0])
             if campaigns.get(cid) and len(args) > 1:
-                return joinflow.add_link(cid, " ".join(args[1:]))
-            # Just a link: the campaign waiting for it, or the only running one.
+                return joinflow.add_footage(cid, rest.partition(" ")[2])
+            # Just a link (or a pasted post): the campaign waiting for it, or the only running one.
             cid, question = _which()
             if not cid:
                 return question
-            return joinflow.add_link(cid, rest)
+            return joinflow.add_footage(cid, rest)
         if cmd == "!add":
             vid = watcher.add_video(args[0], args[1])
             return f"Added `{vid}` to `{args[1]}`. The AI will look for moments on the next pass."
@@ -546,25 +546,8 @@ def pasted(cid, text):
         joinflow.done_waiting()
         return reply
     if kind == "source":
-        c = campaigns.get(cid)
-        if len(text) > 300 or text.count("\n") > 4:   # a whole post or page, not just links: read it like the page
-            joinflow.done_waiting()
-            return brief(cid, text)
-        short = len(text.split()) <= 3   # "@handle" counts as a YouTube channel only when sent on its own
-        links = re.findall(r"https?://\S+|[A-Za-z]:\\[^\n]+" + (r"|@[\w.-]+" if short else ""), text)
-        links = [u.strip().strip("<>").rstrip(").,") for u in links]
-        social = [u for u in links if campaigns.NOT_FOOTAGE.search(u) and "whop.com" not in u.lower()]
-        links = [u for u in links if u not in social]
-        if not links:
-            if social:
-                return (f"**{c['name']}**: those are social media / Discord links, not footage. Send the Whop "
-                        "campaign link, a Drive / Dropbox / YouTube / Twitch link, or paste the whole campaign page.")
-            return "Send the Whop campaign link, a Drive / Dropbox / YouTube / Twitch link, or a folder path."
-        replies = [joinflow.add_link(cid, link) for link in links[:5]]
-        if social:
-            replies.append(f"(Skipped {len(social)} social media link(s): they aren't footage.)")
         joinflow.done_waiting()
-        return f"**{c['name']}**:\n" + "\n".join(replies)
+        return joinflow.add_footage(cid, text)
     return brief(cid, text)
 
 
@@ -611,8 +594,8 @@ def card_button(kind, cid):
 def brief(cid, text):
     """The campaign page (or a footage link) pasted after tapping "I joined"."""
     from . import joinflow
-    if len(text) < 300 and re.fullmatch(r"\s*<?(https?://\S+|[A-Za-z]:\\.+|@[\w.-]+)>?\s*", text):
-        return joinflow.add_link(cid, text)
+    if len(text) < 300 and re.fullmatch(r"(\s*<?(https?://\S+|[A-Za-z]:\\.+|@[\w.-]+)>?\s*)+", text):
+        return joinflow.add_footage(cid, text)   # only links: each one is footage (or the Whop page)
     try:
         return joinflow.apply_brief(cid, text)
     except Exception as e:

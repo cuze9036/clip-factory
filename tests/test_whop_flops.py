@@ -162,12 +162,21 @@ class FootagePasteTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_whole_post_is_read_like_the_page(self):
-        from clipfactory import commands
+        from clipfactory import commands, joinflow
         post = ("Kitsch x Nic Vans clipping. Tag @kitsch on Instagram.\nFollow https://instagram.com/kitsch\n"
                 "Footage: https://www.dropbox.com/scl/fo/abc/x?rlkey=1\n" + "Rules: clips must be edited.\n" * 20)
-        with mock.patch.object(commands, "brief", return_value="read the page") as b:
+        with mock.patch.object(joinflow, "apply_brief", return_value="read the page") as b:
             self.assertEqual(commands.pasted("kn", post), "read the page")
-        b.assert_called_once()
+            joinflow.expect("kn", "source")
+            self.assertEqual(commands.handle("!source kn " + post), "read the page")   # /source with a post
+            self.assertEqual(commands.handle("!source " + post), "read the page")      # no id: the waiting one
+        self.assertEqual(b.call_count, 3)
+
+    def test_two_links_after_i_joined(self):
+        from clipfactory import commands, joinflow
+        with mock.patch.object(joinflow, "add_link", return_value="ok") as al:
+            commands.brief("kn", "https://www.dropbox.com/scl/fo/a/x?rlkey=1 https://www.twitch.tv/videos/123456")
+        self.assertEqual(al.call_count, 2)
 
     def test_whop_link_is_kept_and_social_links_skipped(self):
         from clipfactory import commands, joinflow

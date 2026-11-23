@@ -162,6 +162,35 @@ def last_joined():
     return best[1] if best else None
 
 
+def add_footage(cid, text):
+    """Anything sent as a campaign's footage: one or more links, or a whole pasted post/page.
+    A post or page is read like the campaign page; social media links are skipped; each link gets its own answer."""
+    c = campaigns.get(cid)
+    if not c:
+        return f"No campaign `{cid}`."
+    text = (text or "").strip()
+    if len(text) > 300 or text.count("\n") > 4:   # a whole post or page, not just links
+        try:
+            return apply_brief(cid, text)
+        except Exception as e:
+            db.log(cid, f"Reading the pasted post failed: {e}", "error")
+            return f"Couldn't read that post: {str(e)[:300]}. Try again, or send just the footage link."
+    short = len(text.split()) <= 3   # "@handle" counts as a YouTube channel only when sent on its own
+    links = re.findall(r"https?://\S+|[A-Za-z]:\\[^\n]+" + (r"|@[\w.-]+" if short else ""), text)
+    links = list(dict.fromkeys(u.strip().strip("<>").rstrip(").,") for u in links))
+    social = [u for u in links if campaigns.NOT_FOOTAGE.search(u) and "whop.com" not in u.lower()]
+    links = [u for u in links if u not in social]
+    if not links:
+        if social:
+            return (f"**{c['name']}**: those are social media / Discord links, not footage. Send the Whop campaign "
+                    "link, a Drive / Dropbox / YouTube / Twitch link, or paste the whole campaign page.")
+        return "Send the Whop campaign link, a Drive / Dropbox / YouTube / Twitch link, or a folder path."
+    replies = [add_link(cid, link) for link in links[:5]]
+    if social:
+        replies.append(f"(Skipped {len(social)} social media link(s): they aren't footage.)")
+    return f"**{c['name']}**:\n" + "\n".join(replies)
+
+
 def add_link(cid, line):
     """A link or folder for a campaign you joined: add it as footage and start the lane. Returns a reply."""
     c = campaigns.get(cid)

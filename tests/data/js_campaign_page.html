@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Test campaign</title></head>
+<body>
+<h1>Test clipping campaign</h1>
+<div id="brief"></div>
+<button id="more">Show more</button>
+<div id="hidden" hidden>Reference footage: <a href="https://drive.google.com/drive/folders/REFFOLDER1234567890">Drive folder</a></div>
+<button id="join">Join campaign</button>
+<div id="joined"></div>
+<script>
+  document.getElementById("brief").textContent = "Earn $2 per 1K views. Max payout $300.";
+  document.getElementById("more").onclick = function () { document.getElementById("hidden").hidden = false; };
+  document.getElementById("join").onclick = function () { document.getElementById("joined").textContent = "JOIN WAS CLICKED"; };
+</script>
+</body></html>

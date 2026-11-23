@@ -311,3 +311,4 @@ class BrowserPageTest(unittest.TestCase):
             self.skipTest(str(e))
         self.assertIn("Max payout $300", text)                                     # loaded by JavaScript
         self.assertIn("drive.google.com/drive/folders/REFFOLDER1234567890", text)   # behind "Show more"
+        self.assertNotIn("JOIN WAS CLICKED", text)                                 # Join is never clicked

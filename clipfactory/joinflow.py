@@ -321,8 +321,14 @@ def apply_brief(cid, text, quiet=False):
         campaigns.activate(cid)
         out.append("**The lane is running.** Clips will show up here for review.")
     else:
-        out.append(f"No footage link found yet. Send `!source {cid} <YouTube/Twitch channel, video or folder>` "
-                   f"and then `!activate {cid}`.")
+        from . import whop_page
+        if whop_page.WHOP.search(text):
+            out.append("⚠️ The campaign page, opened without login, shows **no footage or reference links**. Whop "
+                       "often shows them only to people who joined. On the page, look for **Resources / Reference "
+                       "material / Assets**, copy those links and send them with 🎬 Footage. `!page` shows what I saw.")
+        else:
+            out.append("No footage link found yet. Tap 🎬 Footage and send the Drive / Dropbox / YouTube / Twitch "
+                       "link (or the Whop campaign link).")
     return "\n".join(out)
 
 

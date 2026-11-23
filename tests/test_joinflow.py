@@ -91,8 +91,10 @@ class JoinFlowTest(unittest.TestCase):
         from clipfactory import campaigns, commands, joinflow
         cid = self._found("Band Live Clipping")
         commands.button(f"join:{cid}")
-        out = commands.handle("/source https://whop.com/band/clips/")
-        self.assertIn("Ctrl+A", out)                                  # a Whop link: paste the page instead
+        from clipfactory import whop_page
+        with mock.patch.object(whop_page, "fetch", side_effect=whop_page.NeedsPaste(whop_page.PASTE_HELP)):
+            out = commands.handle("/source https://whop.com/band/clips/")
+        self.assertIn("Ctrl+A", out)                                  # a Whop page behind login: paste it
         out = commands.handle("! source https://www.youtube.com/@BandOfficial")
         self.assertIn("is running", out)
         self.assertEqual(campaigns.get(cid)["stage"], "active")

@@ -35,7 +35,8 @@ class WhopPageTest(unittest.TestCase):
 
     def test_login_wall_asks_for_a_paste(self):
         from clipfactory import whop_page
-        with mock.patch("requests.get", return_value=Resp("<html>Sign in</html>", url="https://whop.com/login")):
+        with mock.patch("requests.get", return_value=Resp("<html>Sign in</html>", url="https://whop.com/login")), \
+                mock.patch.object(whop_page, "render", return_value="Sign in to continue"):
             with self.assertRaises(whop_page.NeedsPaste) as e:
                 whop_page.fetch("https://whop.com/kitsch/clips/")
         self.assertIn("Ctrl+A", str(e.exception))
@@ -272,3 +273,41 @@ class ContentRewardsLinkTest(unittest.TestCase):
             out = commands.pasted("cod", self.LINK + "\n" + self.PREVIEW)
         ab.assert_not_called()
         self.assertIn("Ctrl+A", out)
+
+
+class BrowserPageTest(unittest.TestCase):
+    """Pages that load the brief with JavaScript: opened in a headless browser with no login."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["CLIPFACTORY_DATA"] = self.tmp.name
+        from clipfactory import db
+        db._local.__dict__.clear()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_plain_download_without_links_falls_back_to_the_browser(self):
+        from clipfactory import whop_page
+        plain = "Campaign: earn per 1K views, clips, budget, payout. " * 20
+        with mock.patch.object(whop_page, "_plain", return_value=plain), \
+                mock.patch.object(whop_page, "render",
+                                  return_value=plain + "\nhttps://drive.google.com/drive/folders/REF1234567890") as r:
+            text = whop_page.fetch("https://contentrewards.com/c/campaigns/x")
+        r.assert_called_once()
+        self.assertIn("REF1234567890", text)
+        self.assertIn("REF1234567890", whop_page.last_page())
+
+    def test_real_browser_opens_hidden_sections_but_never_join(self):
+        import importlib.util
+        import pathlib
+        if not importlib.util.find_spec("playwright"):
+            self.skipTest("playwright not installed")
+        from clipfactory import whop_page
+        page = pathlib.Path(__file__).parent / "data" / "js_campaign_page.html"
+        try:
+            text = whop_page.render(page.resolve().as_uri())
+        except RuntimeError as e:
+            self.skipTest(str(e))
+        self.assertIn("Max payout $300", text)                                     # loaded by JavaScript
+        self.assertIn("drive.google.com/drive/folders/REFFOLDER1234567890", text)   # behind "Show more"

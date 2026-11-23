@@ -78,7 +78,7 @@ def _script_text(scripts):
                     out.append(x)
         for m in re.finditer(r'"((?:[^"\\]|\\.){60,4000})"', s):   # streamed page data: long quoted strings
             t = m.group(1)
-            if " " in t and not t.startswith(("$", "http", "M0", "M1", "data:")):
+            if " " in t and not t.startswith(("$", "http", "M0", "M1", "data:")) and not re.search(r"<\w+[^>]*>", t):
                 try:
                     out.append(json.loads(f'"{t}"'))
                 except json.JSONDecodeError:
@@ -102,8 +102,87 @@ def to_text(html):
     return out
 
 
-def fetch(url):
-    """The campaign page's text (with its links). Raises NeedsPaste when Whop doesn't show it without login."""
+FOOTAGE = re.compile(r"https?://[^\s\"'<>\\]*(docs\.google|drive\.google|dropbox\.com|youtu\.?be|twitch\.tv|kick\.com|"
+                     r"mega\.nz|wetransfer|we\.tl|vimeo\.com|streamable\.com|notion\.s|frame\.io|box\.com|1drv\.ms|"
+                     r"onedrive|sharepoint)[^\s\"'<>\\]*", re.I)
+BUTTONS = re.compile(r"^\s*(show|read|see|view) (more|all|details)|^\s*expand|resources?|reference|assets|"
+                     r"materials?|footage|brief|requirements|guidelines", re.I)
+NEVER_CLICK = re.compile(r"join|sign|log ?in|submit|apply|pay|buy|connect|follow|claim", re.I)
+
+
+def _launch(p):
+    """The browser already on the laptop (Edge, else Chrome), else Playwright's own Chromium. Headless."""
+    import os
+    for kw in ({"channel": "msedge"}, {"channel": "chrome"}, {},
+               {"executable_path": os.environ.get("CHROMIUM_PATH") or "/opt/pw-browsers/chromium"}):
+        try:
+            return p.chromium.launch(headless=True, **kw)
+        except Exception:
+            continue
+    raise RuntimeError("no browser found")
+
+
+def render(url, timeout_s=45):
+    """Open the page like a private browser window with no account (fresh, no cookies, never logged in), let its
+    JavaScript load, open "show more" / "Resources" style sections, and return the text with every link on it,
+    including links inside the data the page loads."""
+    from playwright.sync_api import sync_playwright
+    data = []
+    with sync_playwright() as p:
+        browser = _launch(p)
+        try:
+            page = browser.new_context(user_agent=UA, locale="en-US").new_page()
+
+            def keep(r):
+                try:
+                    if "json" in (r.headers.get("content-type") or "") and len(data) < 60:
+                        data.append(r.text()[:400000])
+                except Exception:
+                    pass
+            page.on("response", keep)
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_s * 1000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            home = page.url
+            for role in ("button", "tab", "link"):   # open collapsed parts of the page (never Join / Submit / Login)
+                try:
+                    items = page.get_by_role(role).all()[:80]
+                except Exception:
+                    items = []
+                for el in items:
+                    try:
+                        name = (el.inner_text(timeout=500) or "").strip()[:60]
+                        if not name or not BUTTONS.search(name) or NEVER_CLICK.search(name) or not el.is_visible():
+                            continue
+                        if role == "link" and (el.get_attribute("href") or "").startswith("http"):
+                            continue   # real links are read, not clicked
+                        el.click(timeout=2000)
+                        page.wait_for_timeout(800)
+                        if page.url.split("#")[0] != home.split("#")[0]:
+                            page.go_back(timeout=10000)
+                            page.wait_for_timeout(800)
+                    except Exception:
+                        continue
+            html = page.content()
+            visible = page.inner_text("body")
+            links = page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")
+        finally:
+            browser.close()
+    found = sorted(set(m.group(0).rstrip(".,)") for blob in [html, visible, *data] for m in FOOTAGE.finditer(blob)))
+    links = sorted(set(u for u in links if FOOTAGE.search(u)) | set(found))
+    text = re.sub(r"\n\s*\n+", "\n", visible).strip()
+    extra = [t for t in _script_text([html] + data) if t[:80] not in text]
+    if extra:
+        text += "\n\n" + "\n".join(extra[:200])
+    if links:
+        text += "\n\nLinks on the page:\n" + "\n".join(links[:60])
+    return text
+
+
+def _plain(url):
+    """A plain page download (no browser)."""
     try:
         r = requests.get(url, headers={"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"}, timeout=30,
                          allow_redirects=True)
@@ -115,6 +194,49 @@ def fetch(url):
     if len(text) < 400 or len(WORDS.findall(text)) < 3:
         raise NeedsPaste(PASTE_HELP)
     return text[:60000]
+
+
+def fetch(url):
+    """The campaign page's text (with its links), as someone without an account sees it.
+    A plain download first; when that has no footage or reference links (pages that load their content with
+    JavaScript), the page is opened in a headless browser. Raises NeedsPaste when neither shows the campaign."""
+    plain = None
+    try:
+        plain = _plain(url)
+        if FOOTAGE.search(plain):
+            _save(url, plain, "plain")
+            return plain
+    except NeedsPaste:
+        pass
+    try:
+        text = render(url)
+        if len(text) >= 400 and len(WORDS.findall(text)) >= 3:
+            text = (text + ("\n\n" + plain if plain else ""))[:80000]
+            _save(url, text, "browser")
+            return text
+    except Exception as e:
+        db.log(None, f"Opening the campaign page in a browser failed: {str(e)[:200]}", "warn")
+    if plain:
+        _save(url, plain, "plain")
+        return plain
+    raise NeedsPaste(PASTE_HELP)
+
+
+def _save(url, text, how):
+    """What the page showed, for `!page`."""
+    db.kv_set("last_page", {"url": url, "how": how, "chars": len(text), "text": text[:6000],
+                            "links": sorted(set(m.group(0) for m in FOOTAGE.finditer(text)))[:30]})
+
+
+def last_page():
+    p = db.kv_get("last_page")
+    if not p:
+        return "No campaign page opened yet."
+    out = [f"Last campaign page: <{p['url']}> (opened by {'a headless browser' if p['how'] == 'browser' else 'a plain download'}, "
+           f"{p['chars']:,} characters)"]
+    out.append("Footage / reference links found: " + (", ".join(f"<{u}>" for u in p["links"][:15]) or "none"))
+    out.append("Start of the text:\n" + p["text"][:900])
+    return "\n".join(out)[:1900]
 
 
 def read_into(cid, url):

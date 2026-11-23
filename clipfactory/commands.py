@@ -13,7 +13,7 @@ HELP = """**Clip Factory commands**
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane · `!campaign <whop campaign link>` the bot reads the page itself (no login; if Whop hides it, paste it)
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
-`!fit [campaign]` the campaign check: can the tool do this campaign, account rules, your to-do (runs again with `!fit <campaign> again`)
+`!page` what the bot saw on the last campaign page it opened · `!fit [campaign]` the campaign check: can the tool do this campaign, account rules, your to-do (runs again with `!fit <campaign> again`)
 `!captions <campaign> auto|on|off` our captions on that campaign's clips · `!queue` what goes out next, where and when · `!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
@@ -35,6 +35,7 @@ SLASH = {
     "posted": ("You posted a clip yourself", "post number and the link"),
     "submitted": ("You submitted a post on the campaign page", "post number"),
     "suggested": ("All campaigns the finder found", None),
+    "page": ("What the bot saw on the last campaign page it opened", None),
     "fit": ("Can the tool do this campaign? Account rules and your to-do", "campaign number/id, optionally 'again'"),
     "guide": ("The campaign's guide the AI follows; add reference material", "campaign number/id, then pasted instructions (optional)"),
     "board": ("Refresh #campaign-updates and #active-campaigns now", None),
@@ -441,6 +442,9 @@ def handle(text):
             for k in ("live", "running"):
                 db.kv_set(f"board_last_full:{k}", None)
             return "Refreshing #campaign-updates and #active-campaigns (about a minute)."
+        if cmd == "!page":
+            from . import whop_page
+            return whop_page.last_page()
         if cmd == "!fit":
             from . import check, llm
             cid, question = _which(_resolve(args[0]) if args else "")

@@ -32,6 +32,10 @@ What it CANNOT do:
 - Write a scripted ad or product review in the owner's own voice; draw original art or animation.
 - Log in to Whop, submit clips on Whop, change account names or profile pictures, create accounts (the owner does
   these by hand).
+- Follow a shot-by-shot editing job: replace given shots with provided substitute files, re-edit a video to an
+  exact edit list, or keep a full video as it is apart from listed changes.
+- Write captions, titles or hooks in a language other than English (a campaign for an Arabic, Spanish, ... audience
+  that wants on-screen text in that language).
 - Post more than about 10 YouTube uploads a day."""
 
 PROMPT = """You are checking a clipping campaign before an automated clipping tool starts working on it.
@@ -52,8 +56,9 @@ Campaign page and guide documents:
 
 Return JSON only:
 {{"verdict": "go" (the tool can make clips that follow the rules) | "partial" (some parts need the owner or some
-             clips/platforms can't be done, but clips can be made) | "no" (the campaign needs things the tool can't
-             do, like filming or voice-over),
+             clips/platforms can't be done, but clips can be made) | "no" (the campaign's main deliverable needs
+             things the tool can't do, like filming, voice-over, a shot-by-shot substitution edit, or captions in
+             another language; manual posting or Whop submission alone is never a reason for "no"),
   "summary": "2 sentences: what the campaign wants and how the tool will do it",
   "can": ["up to 6 short lines: what the tool will do for it"],
   "cannot": ["up to 5 short lines: what the tool can't do here, or empty"],

@@ -205,6 +205,10 @@ manual_posting:                   # clips you post by hand
 owner_timezone: Asia/Kolkata      # reminders show this time next to US Eastern
 always_manual: []                 # platforms you always post by hand even when the API works
 
+submit:                           # Whop submission reminders on Discord (you submit; the tool never touches Whop)
+  within_minutes: 30              # campaigns want the link submitted this soon after posting
+  second_reminder_minutes: 20     # not marked Submitted by then: one more ping
+
 graph_api_version: v21.0
 
 update:

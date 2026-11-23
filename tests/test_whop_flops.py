@@ -112,16 +112,37 @@ class LaneTest(unittest.TestCase):
         flop, _ = self._clip(views=800)
         self.assertEqual(flops.flopped(self.c()), [flop])
 
-    def test_submit_reminder_without_a_saved_link(self):
-        from clipfactory import notify, publish
+    def test_submit_reminder_campaign_reel_number_and_link_alone(self):
+        from clipfactory import db, notify, publish
+        self._clip(views=0, hours_ago=3)
         clip, _ = self._clip(views=0, hours_ago=0)
-        from clipfactory import db
         pid = db.one("SELECT id FROM posts WHERE clip_id=?", clip)["id"]
         with mock.patch.object(notify, "send") as sent:
             publish.submit_reminder(pid)
-        text = sent.call_args.args[1]
-        self.assertIn("Kitsch campaign page on Whop", text)
-        self.assertNotIn("within 30 minutes", text)
+        head, link = sent.call_args_list[0].args[1], sent.call_args_list[1].args[1]
+        self.assertIn("Submit now: Kitsch", head)
+        self.assertIn("YouTube Short 2", head)                 # the second one on YouTube for this campaign
+        self.assertIn("submit by", head)
+        self.assertIn("IST", head)
+        self.assertEqual(link, "https://youtu.be/x")           # the link alone: easy to copy
+        self.assertEqual(sent.call_args_list[0].kwargs["buttons"][0][0], "Submitted")
+
+    def test_one_more_ping_if_not_submitted(self):
+        from clipfactory import db, notify, publish
+        from clipfactory.util import iso, utcnow
+        clip, _ = self._clip(views=0, hours_ago=0)
+        pid = db.one("SELECT id FROM posts WHERE clip_id=?", clip)["id"]
+        with mock.patch.object(notify, "send"):
+            publish.submit_reminder(pid)
+        with mock.patch.object(notify, "send") as sent:
+            publish.submit_nudges()                            # too early
+            self.assertEqual(sent.call_count, 0)
+            db.kv_set(f"submit_ping:{pid}", iso(utcnow() - dt.timedelta(minutes=21)))
+            publish.submit_nudges()
+            publish.submit_nudges()                            # once only
+        self.assertEqual(sent.call_count, 2)
+        self.assertIn("min left to submit", sent.call_args_list[0].args[1])
+        db.x("UPDATE posts SET submitted=1 WHERE id=?", pid)
 
     def test_running_lanes_get_the_check_without_new_videos(self):
         from clipfactory import check, llm, notify, pipeline

@@ -406,6 +406,7 @@ def mark_posted(post_id, url):
 
 def run_due():
     run_manual()
+    submit_nudges()
     done = 0
     for post in due_posts():
         clip = db.one("SELECT * FROM clips WHERE id=?", post["clip_id"])
@@ -443,14 +444,60 @@ def run_due():
     return done
 
 
+def _submit_row(post_id):
+    p = db.one("""SELECT p.*, c.name campaign, c.url campaign_url, c.origin FROM posts p
+                  JOIN campaigns c ON c.id=p.campaign_id WHERE p.id=?""", post_id)
+    if not p or p["submitted"] or not p["url"] or (p["origin"] == "yaml" and not p["campaign_url"]):
+        return None   # own channel: nothing to submit
+    return p
+
+
+NAMES = {"youtube": "YouTube", "instagram": "Instagram", "facebook": "Facebook", "tiktok": "TikTok", "x": "X"}
+
+
+def reel_number(p):
+    """1, 2, 3 ... per campaign and platform, in posting order."""
+    return db.one("""SELECT COUNT(*) n FROM posts WHERE campaign_id=? AND platform=? AND status='posted'
+                     AND url IS NOT NULL AND (posted_at < ? OR (posted_at = ? AND id <= ?))""",
+                  p["campaign_id"], p["platform"], p["posted_at"], p["posted_at"], p["id"])["n"] or 1
+
+
 def submit_reminder(post_id):
-    p = db.one("""SELECT p.*, c.name campaign, c.url campaign_url, c.platform site, c.origin, k.title FROM posts p
-                  JOIN campaigns c ON c.id=p.campaign_id JOIN clips k ON k.id=p.clip_id WHERE p.id=?""", post_id)
-    if not p or p["submitted"] or (p["origin"] == "yaml" and not p["campaign_url"]):   # own channel: nothing to submit
+    """Right after a clip goes live: one short message (campaign, reel number, deadline, Submitted button) and,
+    on its own, the link, so a long-press copies only the link."""
+    p = _submit_row(post_id)
+    if not p:
         return
-    where = p["campaign_url"] or f"the {p['campaign']} campaign page on Whop"
-    notify.send("submit", f"Live now on {p['platform'].title()}: {p['url']}\n"
-                f"Submit this link on {where} now (the sooner, the better). If Whop says to wait, "
-                "submit it as soon as it lets you.\n"
-                f"{p['campaign']} · {p['title']}", campaign_id=p["campaign_id"], post_id=post_id,
+    minutes = config.section("submit").get("within_minutes", 30)
+    deadline = when_text({"scheduled_at": iso(utcnow() + dt.timedelta(minutes=minutes))})
+    kind = "Reel" if p["platform"] in ("instagram", "facebook") else "Short" if p["platform"] == "youtube" else "Post"
+    head = (f"📌 **Submit now: {p['campaign']}**\n"
+            f"{NAMES.get(p['platform'], p['platform'].title())} {kind} {reel_number(p)} · submit by {deadline}\n"
+            f"Copy the link below → Whop: {('<' + p['campaign_url'] + '>') if p['campaign_url'] else 'the campaign page'}")
+    notify.send("submit", head, campaign_id=p["campaign_id"], post_id=post_id,
                 buttons=[["Submitted", f"sub:{post_id}", "green"]])
+    notify.send("submit", p["url"], campaign_id=p["campaign_id"], post_id=post_id)
+    db.kv_set(f"submit_ping:{post_id}", iso(utcnow()))
+
+
+def submit_nudges():
+    """Not marked Submitted after a while: one more short ping, with the link on its own again."""
+    cfg = config.section("submit")
+    after = dt.timedelta(minutes=cfg.get("second_reminder_minutes", 20))
+    for k in db.q("SELECT k, v FROM kv WHERE k LIKE 'submit_ping:%'"):
+        post_id = int(k["k"].split(":")[1])
+        try:
+            sent = parse_iso(json.loads(k["v"]))
+        except (TypeError, ValueError):
+            sent = None
+        if not sent or utcnow() - sent < after:
+            continue
+        db.x("DELETE FROM kv WHERE k=?", k["k"])   # one extra ping per post
+        p = _submit_row(post_id)
+        if not p:
+            continue
+        left = cfg.get("within_minutes", 30) - cfg.get("second_reminder_minutes", 20)
+        notify.send("submit", f"⏰ **{p['campaign']}**: about {left} min left to submit this one "
+                    f"({NAMES.get(p['platform'], p['platform'].title())} {reel_number(p)}).", campaign_id=p["campaign_id"], post_id=post_id,
+                    buttons=[["Submitted", f"sub:{post_id}", "green"]])
+        notify.send("submit", p["url"], campaign_id=p["campaign_id"], post_id=post_id)

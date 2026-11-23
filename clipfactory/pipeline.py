@@ -98,7 +98,7 @@ def want_captions(c, v, raw_path):
     return not known
 
 
-def pick_style(c, m, layout, face, clip, captions=True):
+def pick_style(c, m, layout, face, clip, captions=True, vertical=False):
     """The edit style: a campaign's fixed choice, else one that fits the content (varied for the weekly review).
     'framed' / 'blur' set in config.yaml keep the older looks."""
     fixed = config.section("render").get("style", "auto")
@@ -107,6 +107,9 @@ def pick_style(c, m, layout, face, clip, captions=True):
     db.kv_set(f"restyle:{clip['id']}", None)
     key = f"styles_used:{m['id']}"   # every remake / re-edit of this moment gets a style it hasn't had yet
     used = db.kv_get(key) or []
+    if not captions and vertical:   # already 9:16 with its own captions: bold_crop is the whole frame, the boxed
+        db.kv_set(key, (used + ["bold_crop"])[-5:])   # styles would crop its top, bottom and captions away
+        return "bold_crop"
     if not captions:   # footage with its own captions: show the whole frame so their text isn't cropped off
         avoid = list(used) + ["bold_crop", "word_pop", "split"]
         style = styles.choose(c["topic"], m["category"] or "", avoid=avoid)
@@ -129,7 +132,11 @@ def stage_render(c, limit=1):
             layout, face = _source_layout(v)
             final = clip["raw_path"].replace("_raw.mp4", "_final.mp4")
             captions = want_captions(c, v, clip["raw_path"])
-            style = pick_style(c, m, layout, face, clip, captions)
+            vertical = False
+            if not captions:
+                src = render.ffprobe(clip["raw_path"])
+                vertical = src["width"] / max(1, src["height"]) < 0.7
+            style = pick_style(c, m, layout, face, clip, captions, vertical)
             res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"],
                                 style=style, accent=styles.accent_for(c["topic"], m["category"] or ""),
                                 captions=captions, plan=director_plan(m, words))

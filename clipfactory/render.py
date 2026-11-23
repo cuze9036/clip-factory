@@ -273,14 +273,17 @@ def _encode(cmd, out, cfg):
             run(cmd + gpu + tail)
             return
         except RuntimeError as e:
-            import datetime as dt
-            from . import db
-            from .util import iso, utcnow
-            # One failure shouldn't mean CPU forever: pause the GPU for 6 hours, then try it again.
-            db.kv_set("nvenc_ok", None)
-            db.kv_set("nvenc_pause_until", iso(utcnow() + dt.timedelta(hours=6)))
-            db.kv_set("nvenc_last_error", str(e)[-300:])
-            db.log(None, f"GPU video encoding failed ({str(e)[-160:]}); using the CPU for 6 hours", "warn")
+            gpu_error = e
+        run(cmd + cpu + tail)   # fails too -> the filters are wrong, not the GPU: the error goes up, GPU stays on
+        import datetime as dt
+        from . import db
+        from .util import iso, utcnow
+        # The CPU managed what the GPU couldn't. One failure shouldn't mean CPU forever: pause it 6 hours.
+        db.kv_set("nvenc_ok", None)
+        db.kv_set("nvenc_pause_until", iso(utcnow() + dt.timedelta(hours=6)))
+        db.kv_set("nvenc_last_error", str(gpu_error)[-300:])
+        db.log(None, f"GPU video encoding failed ({str(gpu_error)[-160:]}); using the CPU for 6 hours", "warn")
+        return
     run(cmd + cpu + tail)
 
 

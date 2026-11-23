@@ -257,10 +257,10 @@ def video_filter(style, src, facecam=None, duration=10.0, plan=None, faces=None)
     if style == "blur_box":
         return (f"[0:v]split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
                 f"boxblur=40:2,eq=brightness=-0.22:saturation=1.1[bg];"
-                f"[b]scale=-2:740,crop={W}:740,setsar=1,{grade},{effects.motion(W, 740, plan, d)}[fg];"
+                f"[b]scale={W}:740:force_original_aspect_ratio=increase,crop={W}:740,setsar=1,{grade},{effects.motion(W, 740, plan, d)}[fg];"
                 f"[bg][fg]overlay=0:600,setsar=1{flash}[v0]")
     if style == "black_title":
-        return (f"color=c=black:s={W}x{H}:r={fps}[bg];[0:v]scale=-2:1080,crop=1080:1080,setsar=1,{grade},"
+        return (f"color=c=black:s={W}x{H}:r={fps}[bg];[0:v]scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080,setsar=1,{grade},"
                 f"{effects.motion(1080, 1080, plan, d)}[fg];[bg][fg]overlay=0:420:shortest=1,setsar=1{flash}[v0]")
     if style == "meme_top":
         return (f"color=c=white:s={W}x{H}:r={fps}[bg];[0:v]scale={W}:1400:force_original_aspect_ratio=increase,"
@@ -269,6 +269,6 @@ def video_filter(style, src, facecam=None, duration=10.0, plan=None, faces=None)
     if style == "split" and facecam:
         fx, fy, fw, fh = facecam
         return (f"[0:v]split[a][b];[a]crop=iw*{fw}:ih*{fh}:iw*{fx}:ih*{fy},scale={W}:960:force_original_aspect_ratio="
-                f"increase,crop={W}:960,setsar=1,{grade}[face];[b]scale=-2:960,crop={W}:960,setsar=1,{grade},"
+                f"increase,crop={W}:960,setsar=1,{grade}[face];[b]scale={W}:960:force_original_aspect_ratio=increase,crop={W}:960,setsar=1,{grade},"
                 f"{effects.motion(W, 960, plan, d)}[game];[face][game]vstack,setsar=1{flash}[v0]")
     return video_filter("bold_crop", src, None, duration, plan, faces)

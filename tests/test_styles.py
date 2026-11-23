@@ -55,6 +55,45 @@ class StylesTest(unittest.TestCase):
             db.kv_set("nvenc_pause_until", "2020-01-01T00:00:00Z")
             self.assertTrue(render.use_nvenc({"encoder": "auto"}))
 
+    def test_a_bad_filter_does_not_switch_the_gpu_off(self):
+        from unittest import mock
+        from clipfactory import db, render
+        db._local.__dict__.clear()
+        with mock.patch.object(render, "use_nvenc", return_value=True),                 mock.patch.object(render, "run", side_effect=RuntimeError("crop: Invalid too big")):
+            with self.assertRaises(RuntimeError):
+                render._encode(["ffmpeg"], "out.mp4", {})
+        self.assertIsNone(db.kv_get("nvenc_pause_until"))   # the CPU failed too: not the GPU's fault
+        calls = []
+        with mock.patch.object(render, "use_nvenc", return_value=True),                 mock.patch.object(render, "run", side_effect=lambda cmd: calls.append(cmd) or (
+                    (_ for _ in ()).throw(RuntimeError("nvenc: no device")) if "h264_nvenc" in cmd else None)):
+            render._encode(["ffmpeg"], "out.mp4", {})
+        self.assertIn("libx264", calls[-1])
+        self.assertIsNotNone(db.kv_get("nvenc_pause_until"))   # the CPU managed: now the GPU rests 6 hours
+
+    def test_vertical_footage_with_its_own_captions_keeps_the_whole_frame(self):
+        from clipfactory import campaigns, db, pipeline
+        db._local.__dict__.clear()
+        cid = campaigns.suggest({"name": "Kitsch", "platforms": ["instagram"], "rate_per_1k": 2,
+                                 "topic": "hair care gifts"}, "pasted")
+        m = {"id": 3, "category": "funny"}
+        for k in range(3):
+            self.assertEqual(pipeline.pick_style(campaigns.get(cid), m, "blur", None, {"id": k}, captions=False,
+                                                 vertical=True), "bold_crop")
+        self.assertNotIn(pipeline.pick_style(campaigns.get(cid), m, "blur", None, {"id": 5}, captions=False),
+                         ("bold_crop", "word_pop", "split"))
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "needs FFmpeg")
+    def test_every_style_fits_tall_and_square_footage(self):
+        from clipfactory import styles
+        for w, h in ((1080, 1920), (1440, 1080), (1920, 1080)):
+            for style in styles.STYLE_NAMES:
+                vf = styles.video_filter(style, {"width": w, "height": h, "fps": 30, "duration": 1.0},
+                                         facecam=(0.0, 0.6, 0.3, 0.3) if style == "split" else None, duration=1.0)
+                r = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", f"testsrc2=s={w}x{h}:r=30:d=1",
+                                    "-filter_complex", vf, "-map", "[v0]", "-f", "null", "-"],
+                                   capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, f"{style} on {w}x{h}: {r.stderr[-300:]}")
+
     def test_short_credit_and_clean_title(self):
         from clipfactory import styles
         self.assertEqual(styles.short_credit("Credit: @mby on Instagram & YouTube, @mbyclips on TikTok"), "@mby")

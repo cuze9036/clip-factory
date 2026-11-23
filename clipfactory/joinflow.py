@@ -214,7 +214,7 @@ def apply_brief(cid, text, quiet=False):
     added, problems, blocked = [], [], []
     for line in data.get("sources") or []:
         line = str(line).strip()
-        if DRIVE.match(line):
+        if DRIVE.match(line) or campaigns.NOT_FOOTAGE.search(line):   # Drive is explored below; social links aren't footage
             continue
         try:
             added.append(campaigns.add_source(cid, line))

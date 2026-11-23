@@ -90,6 +90,12 @@ def remove_duplicate_suggestions():
 
 # ---------- sources ----------
 
+# Links that are never footage (profiles, example posts, invites): skipped quietly.
+NOT_FOOTAGE = re.compile(r"https?://(?:[\w-]+\.)*(instagram\.com|tiktok\.com|x\.com|twitter\.com|facebook\.com|"
+                         r"fb\.com|discord\.gg|discord\.com|linktr\.ee|threads\.net|snapchat\.com|t\.me|"
+                         r"whop\.com)/", re.I)
+
+
 def parse_source(line):
     """Turn a pasted line into (kind, id). Accepts YouTube channel links or @handles, Twitch channels,
     and folders on this computer. Single video links return kind 'video'."""
@@ -111,8 +117,8 @@ def parse_source(line):
     m = re.search(r"twitch\.tv/([A-Za-z0-9_]+)/?$", line)
     if m:
         return "twitch_channel", m.group(1).lower()
-    raise ValueError(f"Can't use this source: {line}. Use a YouTube channel, a Twitch channel, a video link, "
-                     "a Dropbox link or a folder path.")
+    raise ValueError(f"Can't use this as footage: {line[:100]}. Send the Whop campaign link, a Google Drive, "
+                     "Dropbox, YouTube or Twitch link, or a folder path.")
 
 
 def set_sources(campaign_id, items, default_layout="blur"):

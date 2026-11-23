@@ -546,11 +546,23 @@ def pasted(cid, text):
         joinflow.done_waiting()
         return reply
     if kind == "source":
-        links = re.findall(r"https?://\S+|[A-Za-z]:\\[^\n]+|@[\w.-]+", text)
-        if not links:
-            return "Send a Dropbox / YouTube / Twitch link or a folder path."
         c = campaigns.get(cid)
-        replies = [joinflow.add_link(cid, link.strip()) for link in links[:5]]
+        if len(text) > 300 or text.count("\n") > 4:   # a whole post or page, not just links: read it like the page
+            joinflow.done_waiting()
+            return brief(cid, text)
+        short = len(text.split()) <= 3   # "@handle" counts as a YouTube channel only when sent on its own
+        links = re.findall(r"https?://\S+|[A-Za-z]:\\[^\n]+" + (r"|@[\w.-]+" if short else ""), text)
+        links = [u.strip().strip("<>").rstrip(").,") for u in links]
+        social = [u for u in links if campaigns.NOT_FOOTAGE.search(u) and "whop.com" not in u.lower()]
+        links = [u for u in links if u not in social]
+        if not links:
+            if social:
+                return (f"**{c['name']}**: those are social media / Discord links, not footage. Send the Whop "
+                        "campaign link, a Drive / Dropbox / YouTube / Twitch link, or paste the whole campaign page.")
+            return "Send the Whop campaign link, a Drive / Dropbox / YouTube / Twitch link, or a folder path."
+        replies = [joinflow.add_link(cid, link) for link in links[:5]]
+        if social:
+            replies.append(f"(Skipped {len(social)} social media link(s): they aren't footage.)")
         joinflow.done_waiting()
         return f"**{c['name']}**:\n" + "\n".join(replies)
     return brief(cid, text)

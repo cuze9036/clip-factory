@@ -146,3 +146,37 @@ class LaneTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FootagePasteTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["CLIPFACTORY_DATA"] = self.tmp.name
+        from clipfactory import campaigns, db, joinflow
+        db._local.__dict__.clear()
+        campaigns.save("kn", {"name": "Kitsch x Nic Vans", "platforms": ["instagram"], "rules": []}, "pasted")
+        db.x("UPDATE campaigns SET stage='active' WHERE id='kn'")
+        joinflow.expect("kn", "source")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_whole_post_is_read_like_the_page(self):
+        from clipfactory import commands
+        post = ("Kitsch x Nic Vans clipping. Tag @kitsch on Instagram.\nFollow https://instagram.com/kitsch\n"
+                "Footage: https://www.dropbox.com/scl/fo/abc/x?rlkey=1\n" + "Rules: clips must be edited.\n" * 20)
+        with mock.patch.object(commands, "brief", return_value="read the page") as b:
+            self.assertEqual(commands.pasted("kn", post), "read the page")
+        b.assert_called_once()
+
+    def test_whop_link_is_kept_and_social_links_skipped(self):
+        from clipfactory import commands, joinflow
+        with mock.patch.object(joinflow, "add_link", return_value="ok") as al:
+            out = commands.pasted("kn", "https://whop.com/kitsch/clips/ https://instagram.com/kitsch")
+        al.assert_called_once_with("kn", "https://whop.com/kitsch/clips/")
+        self.assertIn("Skipped 1 social media link", out)
+
+    def test_only_social_links_get_a_plain_answer(self):
+        from clipfactory import commands
+        out = commands.pasted("kn", "https://www.tiktok.com/@kitsch/video/123")
+        self.assertIn("not footage", out)

@@ -64,7 +64,8 @@ app.jinja_env.globals["media_url"] = media_url
 def _nav():
     return {"review_count": db.one("SELECT COUNT(*) n FROM clips WHERE status='pending_review'")["n"],
             "submit_count": db.one("""SELECT COUNT(*) n FROM posts p JOIN campaigns c ON c.id=p.campaign_id
-                                      WHERE p.status='posted' AND p.submitted=0 AND c.url != ''""")["n"]}
+                                      WHERE p.status='posted' AND p.submitted=0
+                                      AND (COALESCE(c.url, '') != '' OR c.origin != 'yaml')""")["n"]}
 
 
 @app.route("/")

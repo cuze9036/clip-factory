@@ -130,6 +130,13 @@ schedule:
 stats:
   every_hours: 6
 
+flops:                            # clips with few views (clipfactory/flops.py)
+  enabled: true
+  after_hours: 48                 # judged this long after posting
+  views_below: 300                # fewer views than this (or the campaign's minimum to get paid) = a flop
+  remake: true                    # make a new version of the moment (new style + titles), unless the campaign
+                                  # forbids reposts; each flop also allows one more fresh clip a day
+
 review:
   auto_approve_score: 9           # clips the AI scores this high post by themselves; 11 = review everything
   dashboard_url: http://127.0.0.1:8787

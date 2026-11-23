@@ -444,11 +444,13 @@ def run_due():
 
 
 def submit_reminder(post_id):
-    p = db.one("""SELECT p.*, c.name campaign, c.url campaign_url, c.platform site, k.title FROM posts p
+    p = db.one("""SELECT p.*, c.name campaign, c.url campaign_url, c.platform site, c.origin, k.title FROM posts p
                   JOIN campaigns c ON c.id=p.campaign_id JOIN clips k ON k.id=p.clip_id WHERE p.id=?""", post_id)
-    if not p or not p["campaign_url"] or p["submitted"]:
+    if not p or p["submitted"] or (p["origin"] == "yaml" and not p["campaign_url"]):   # own channel: nothing to submit
         return
+    where = p["campaign_url"] or f"the {p['campaign']} campaign page on Whop"
     notify.send("submit", f"Live now on {p['platform'].title()}: {p['url']}\n"
-                f"Submit it on {p['site'] or 'the campaign page'} within 30 minutes: {p['campaign_url']}\n"
+                f"Submit this link on {where} now (the sooner, the better). If Whop says to wait, "
+                "submit it as soon as it lets you.\n"
                 f"{p['campaign']} · {p['title']}", campaign_id=p["campaign_id"], post_id=post_id,
                 buttons=[["Submitted", f"sub:{post_id}", "green"]])

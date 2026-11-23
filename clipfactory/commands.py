@@ -1,5 +1,6 @@
 """What you can type in Discord, and what each button does. Plain functions so they're easy to test."""
 import datetime as dt
+import json
 import re
 
 from . import campaigns, db, notify, review, watcher
@@ -10,7 +11,7 @@ HELP = """**Clip Factory commands**
 `!review` clips waiting for you · `!approve <clip> [title 1-3]` · `!reject <clip> [reason]` · `!cancel <clip>`
 `!todo` clips to post yourself and links to submit · `!posted <post> <link>` · `!submitted <post>`
 `!campaign` or `!live` live campaigns with Open / I joined buttons · after "I joined", just paste the campaign page
-`!campaign <paste the whole campaign page>` AI reads it and suggests a lane
+`!campaign <paste the whole campaign page>` AI reads it and suggests a lane · `!campaign <whop campaign link>` the bot reads the page itself (no login; if Whop hides it, paste it)
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
 `!fit [campaign]` the campaign check: can the tool do this campaign, account rules, your to-do (runs again with `!fit <campaign> again`)
 `!captions <campaign> auto|on|off` our captions on that campaign's clips · `!queue` what goes out next, where and when · `!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
@@ -204,8 +205,9 @@ def todo():
             f"post {r['id']} · {r['campaign']} · {r['platform']} → then `!posted {r['id']} <link>`" for r in manual) + "\n\n"
     rows = db.q("""SELECT p.id, p.platform, p.url, c.name campaign, c.url curl FROM posts p
                    JOIN campaigns c ON c.id=p.campaign_id
-                   WHERE p.status='posted' AND p.submitted=0 AND c.url != '' ORDER BY p.posted_at""")
-    body = "\n".join(f"post {r['id']} · {r['campaign']} · {r['platform']}: {r['url']} → submit at {r['curl']}"
+                   WHERE p.status='posted' AND p.submitted=0
+                   AND (COALESCE(c.url, '') != '' OR c.origin != 'yaml') ORDER BY p.posted_at""")
+    body = "\n".join(f"post {r['id']} · {r['campaign']} · {r['platform']}: {r['url']} → submit at {r['curl'] or 'its Whop campaign page'}"
                      for r in rows)
     return (head + ("**To submit:**\n" + body if body else "Nothing to submit.")).strip()
 
@@ -361,6 +363,25 @@ def handle(text):
             return joinflow.post_live()
         if cmd == "!campaign":
             from . import joinflow
+            from . import whop_page
+            link = whop_page.WHOP.search(rest)
+            if link and len(rest) < 400:   # just the campaign link: read the page from Whop (no login)
+                url = link.group(0).strip("<>")
+                if joinflow.awaiting():
+                    return joinflow.add_link(joinflow.awaiting(), url)
+                try:
+                    text = whop_page.fetch(url)
+                except whop_page.NeedsPaste as e:
+                    return str(e)
+                from . import discovery
+                cid, _ = discovery.add_from_text(text + f"\n\nCampaign page: {url}", origin="pasted")
+                if cid:
+                    c = campaigns.get(cid)
+                    extra = campaigns._extra(c)
+                    extra["whop_url"] = url
+                    db.x("UPDATE campaigns SET notes=?, url=COALESCE(NULLIF(url, ''), ?) WHERE id=?",
+                         json.dumps(extra), url, cid)
+                return None  # the suggestion message with buttons comes from the outbox
             if len(rest) < 40:
                 return "Paste the whole campaign page after `!campaign`, or type `!campaign` alone to see live ones."
             if joinflow.awaiting():

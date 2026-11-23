@@ -39,9 +39,11 @@ def next_slot(c, platform, account, not_before=None):
     earliest = max(utcnow() + dt.timedelta(minutes=15), not_before or utcnow())
     taken = _taken(platform, account)
     quota_days = _campaign_clip_days(c["id"])
+    from . import flops
+    daily = flops.quota(c)   # the campaign's quota, plus one a day per recent clip with few views
     day = earliest.astimezone(ET).date()
     for _ in range(30):
-        if quota_days.get(day, 0) < c["daily_clip_quota"] or not_before:
+        if quota_days.get(day, 0) < daily or not_before:
             same_day = [t for t in taken if t.astimezone(ET).date() == day]
             for hhmm in slots:
                 h, m = map(int, hhmm.split(":"))

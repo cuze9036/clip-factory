@@ -170,9 +170,12 @@ def add_link(cid, line):
         from . import gdrive
         db.kv_set(AWAIT_KEY, None)
         return gdrive.explore(cid, line)
-    if "whop.com" in line:
-        return (f"That's the campaign page on Whop. I can't log in there, so open it, press **Ctrl+A**, **Ctrl+C** "
-                f"and paste the text here. Or send the creator's YouTube/Twitch channel: `!source {cid} <link>`.")
+    if "whop.com" in line:   # read the campaign page the way anyone without an account sees it (no login)
+        from . import whop_page
+        try:
+            return whop_page.read_into(cid, line)
+        except whop_page.NeedsPaste as e:
+            return f"{e}\nOr send the footage link: `!source {cid} <link>`."
     try:
         reply = campaigns.add_source(cid, line)
     except ValueError as e:
@@ -186,7 +189,7 @@ def add_link(cid, line):
     return reply
 
 
-def apply_brief(cid, text):
+def apply_brief(cid, text, quiet=False):
     """Read the pasted campaign page into an existing campaign, add its footage and start the lane."""
     c = campaigns.get(cid)
     if not c:
@@ -261,7 +264,7 @@ def apply_brief(cid, text):
     out += [n.split("\n", 1)[1] if "\n" in n else n for n in drive_notes]
     if problems:
         out.append("Couldn't use: " + "; ".join(problems[:3]))
-    if blocked:
+    if blocked and not quiet:
         from .gdrive import blocked_text
         notify.send("progress", blocked_text(c["name"], blocked), campaign_id=cid)
         out.append(f"🔒 {len(blocked)} link(s) I couldn't open: see the note for what to do.")

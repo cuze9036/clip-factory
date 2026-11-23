@@ -451,7 +451,7 @@ def lane_stats(c):
             if r["scheduled_at"] and parse_iso(r["scheduled_at"]).astimezone(ET).date().isoformat() == today}),
         "to_submit": count("""SELECT COUNT(*) n FROM posts p JOIN campaigns c ON c.id=p.campaign_id
                               WHERE p.campaign_id=? AND p.status='posted' AND p.submitted=0
-                              AND c.url IS NOT NULL AND c.url != ''"""),
+                              AND (COALESCE(c.url, '') != '' OR c.origin != 'yaml')"""),
         "views": sum(p["views"] or 0 for p in posts),
         "earned": round(sum(post_earning(c, p["views"] or 0) for p in posts), 2),
         "state": lane_state(c),

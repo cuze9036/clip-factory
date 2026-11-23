@@ -170,6 +170,10 @@ def run_once():
         except Exception as e:
             db.log(None, f"Watcher error: {e}", "error")
     for c in campaigns.active():
+        try:
+            _keep_up(c)
+        except Exception as e:
+            db.log(c["id"], f"Campaign upkeep failed: {str(e)[:200]}", "warn")
         for stage in (stage_analyze, stage_download, stage_render, stage_metadata):
             try:
                 stage(c)
@@ -182,6 +186,11 @@ def run_once():
             db.log(None, f"{fn.__module__} error: {e}", "error")
     if _due("stats_last_run", cfg_s.get("every_hours", 6) * 60):
         analytics.refresh()
+        try:
+            from . import flops
+            flops.run()   # clips with few views: new versions and more fresh clips
+        except Exception as e:
+            db.log(None, f"Flop check failed: {str(e)[:200]}", "warn")
     gw = config.section("gmail_watch")
     if gw.get("enabled", True) and _due("gmail_last_run", gw.get("every_minutes", 30)):
         db.kv_set("gmail_last_run", iso(utcnow()))
@@ -214,6 +223,18 @@ def run_once():
                 db.log(None, f"Weekly review failed: {str(e)[:200]}", "warn")
     if _due("discovery_last_run", config.section("discovery").get("every_hours", 6) * 60):
         discovery.run()
+
+
+def _keep_up(c):
+    """Per campaign, now and then: the campaign check (also for lanes that ran before it existed) and a fresh read
+    of its Whop page (new brief, footage or budget)."""
+    from . import check, whop_page
+    if check.needed(c) and not check.get(c) and _due(f"check_try:{c['id']}", 60):
+        db.kv_set(f"check_try:{c['id']}", iso(utcnow()))
+        check.ready(c)
+    if campaigns._extra(c).get("whop_url") and _due(f"whop_read:{c['id']}", 6 * 60):
+        db.kv_set(f"whop_read:{c['id']}", iso(utcnow()))
+        whop_page.refresh(c)
 
 
 def resume_interrupted():

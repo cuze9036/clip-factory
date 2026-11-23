@@ -20,11 +20,13 @@ def _merge(base, extra):
 @lru_cache(maxsize=1)
 def get():
     """config.yaml, with config.local.yaml on top. Updates replace config.yaml but never config.local.yaml."""
-    load_dotenv(ROOT / ".env")
+    testing = bool(os.environ.get("CLIPFACTORY_TESTING"))   # tests: no real keys, no laptop-only settings
+    if not testing:
+        load_dotenv(ROOT / ".env")
     with open(ROOT / "config.yaml", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     local = ROOT / "config.local.yaml"
-    if local.exists():
+    if local.exists() and not testing:
         with open(local, encoding="utf-8") as f:
             cfg = _merge(cfg, yaml.safe_load(f))
     return cfg

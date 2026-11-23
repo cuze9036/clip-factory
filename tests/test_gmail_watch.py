@@ -111,7 +111,12 @@ class GmailWatchTest(unittest.TestCase):
         self.assertEqual(gmail_watch.recent(7)[0]["summary"], "We received your form.")
 
     def test_not_connected_does_not_crash(self):
+        import pathlib
         from clipfactory import gmail_watch, selftest
+        missing = pathlib.Path(self.tmp.name) / "no_token.json"   # the laptop has a real token in secrets/
+        patcher = mock.patch.object(gmail_watch, "token_path", return_value=missing)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.assertFalse(gmail_watch.token_path().exists())
         self.assertEqual(gmail_watch.check(), 0)
         self.assertIn("not connected", gmail_watch.emails_command())

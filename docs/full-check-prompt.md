@@ -1,5 +1,7 @@
 # Prompt for the full A-to-Z check session (with the laptop connected)
 
+Too big for one session? Use the small parts in `docs/check/` instead (one new session per part).
+
 Copy everything below the line into the new Claude Code session. Then connect the laptop (Remote Control) when it asks.
 
 ---

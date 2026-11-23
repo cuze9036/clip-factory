@@ -81,6 +81,16 @@ class CheckTest(unittest.TestCase):
         with mock.patch.object(llm, "complete_json", side_effect=llm.LLMError("down")):
             self.assertEqual([check.ready(self.c()) for _ in range(3)], [False, False, True])
 
+    def test_a_blocker_makes_it_no_whatever_the_verdict(self):
+        from clipfactory import check
+        base = {"verdict": "go", "summary": "Swap given shots in streamer videos.", "can": ["Cut clips"],
+                "cannot": [], "account_rules": [], "owner_todo": []}
+        d = check._validate(dict(base, needs={"shot_by_shot_edit": True, "non_english_text": False}))
+        self.assertEqual(d["verdict"], "no")
+        self.assertIn("shot-by-shot", d["cannot"][0])
+        self.assertEqual(check._validate(dict(base, needs={"shot_by_shot_edit": False}))["verdict"], "go")
+        self.assertEqual(check._validate(base)["verdict"], "go")   # older answers without "needs" still work
+
     def test_own_lanes_need_no_check(self):
         from clipfactory import campaigns, check
         campaigns.save("own-gta6", {"name": "GTA 6", "platforms": ["youtube"]}, "yaml")

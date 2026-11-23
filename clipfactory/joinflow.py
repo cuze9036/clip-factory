@@ -317,11 +317,14 @@ def apply_brief(cid, text, quiet=False):
         from .gdrive import blocked_text
         notify.send("progress", blocked_text(c["name"], blocked), campaign_id=cid)
         out.append(f"🔒 {len(blocked)} link(s) I couldn't open: see the note for what to do.")
+    from . import whop_page
+    locked = whop_page.locked_files(text)
+    if locked:   # the real footage/guide is often exactly what's locked: say so plainly, even with footage
+        out.append(whop_page.locked_note(locked, bool(has_content)))
     if has_content:
         campaigns.activate(cid)
         out.append("**The lane is running.** Clips will show up here for review.")
-    else:
-        from . import whop_page
+    elif not locked:
         if whop_page.WHOP.search(text):
             out.append("⚠️ The campaign page, opened without login, shows **no footage or reference links**. Whop "
                        "often shows them only to people who joined. On the page, look for **Resources / Reference "

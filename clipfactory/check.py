@@ -16,6 +16,9 @@ import json
 from . import campaigns, db, llm, notify
 
 VERDICTS = {"go": "✅ We can do this", "partial": "🟡 We can do part of it", "no": "⛔ Not a fit for this tool"}
+BLOCKERS = {"filming_or_voiceover": "Film new footage, show a face on camera or record a voice-over",
+            "shot_by_shot_edit": "Do a shot-by-shot edit (replace given shots with provided files)",
+            "non_english_text": "Write captions, titles or hooks in a language other than English"}
 MAX_TRIES = 3   # if the AI can't answer this many times, the lane goes on (with a warning) instead of waiting forever
 
 CAN = """What this clipping tool CAN do by itself:
@@ -55,7 +58,13 @@ Campaign page and guide documents:
 {text}
 
 Return JSON only:
-{{"verdict": "go" (the tool can make clips that follow the rules) | "partial" (some parts need the owner or some
+{{"needs": {{"filming_or_voiceover": true/false (the clips must show new filming, a face on camera, a voice-over or
+                                     recorded gameplay of our own),
+            "shot_by_shot_edit": true/false (the job is to replace given shots with provided files, or re-edit
+                                  videos to an exact edit list, instead of cutting the best moments),
+            "non_english_text": true/false (captions, titles or hooks must be written in a language other than
+                                 English; required hashtags or tags in another language do NOT count)}},
+  "verdict": "go" (the tool can make clips that follow the rules) | "partial" (some parts need the owner or some
              clips/platforms can't be done, but clips can be made) | "no" (the campaign's main deliverable needs
              things the tool can't do, like filming, voice-over, a shot-by-shot substitution edit, or captions in
              another language; manual posting or Whop submission alone is never a reason for "no"),
@@ -100,6 +109,13 @@ def _validate(d):
     out = {"verdict": d["verdict"], "summary": str(d.get("summary") or "").strip()[:400],
            "can": _lines(d, "can", 6), "cannot": _lines(d, "cannot", 5),
            "account_rules": _lines(d, "account_rules", 6), "owner_todo": _lines(d, "owner_todo", 5)}
+    # A yes to a plain question is steadier than the AI's overall verdict (the free AI flips between go and partial
+    # on the same page), so any blocker makes it "no", with the reason listed.
+    needs = d.get("needs") if isinstance(d.get("needs"), dict) else {}
+    hits = [why for key, why in BLOCKERS.items() if needs.get(key) is True]
+    if hits:
+        out["verdict"] = "no"
+        out["cannot"] = (hits + [x for x in out["cannot"] if x not in hits])[:5]
     llm.require_english(" ".join([out["summary"]] + out["can"] + out["cannot"] + out["account_rules"]
                                  + out["owner_todo"]))
     return out

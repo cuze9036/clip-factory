@@ -41,6 +41,17 @@ class WhopPageTest(unittest.TestCase):
                 whop_page.fetch("https://whop.com/kitsch/clips/")
         self.assertIn("Ctrl+A", str(e.exception))
 
+    def test_locked_reference_files_are_counted(self):
+        from clipfactory import whop_page
+        self.assertEqual(whop_page.locked_files("Reference materials\n2 files\nVisible once you join\n"
+                                                "Join to unlock 2 files"), 2)
+        self.assertEqual(whop_page.locked_files("Join to unlock 1 file"), 1)
+        self.assertEqual(whop_page.locked_files("Reference materials: Dropbox link"), 0)
+        note = whop_page.locked_note(2, True)
+        self.assertIn("2 reference file(s)", note)
+        self.assertIn("🎬 Footage", note)
+        self.assertIn("already have", note)
+
     def test_no_cookies_or_login_sent(self):
         from clipfactory import whop_page
         with mock.patch("requests.get", return_value=Resp(PAGE)) as get:

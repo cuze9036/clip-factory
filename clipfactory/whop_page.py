@@ -23,6 +23,24 @@ PASTE_HELP = ("Whop shows this campaign only after login, and I never log in to 
               "**Ctrl+A**, **Ctrl+C** and paste the text here (a long paste turns into a file, that's fine).")
 
 
+LOCKED = re.compile(r"Join to unlock\s+(\d+)\s+files?", re.I)
+LOCKED_ANY = re.compile(r"Visible once you join", re.I)
+
+
+def locked_files(text):
+    """How many reference files the page shows only to people who joined ("Join to unlock 2 files"); 0 if none."""
+    m = LOCKED.search(text or "")
+    return int(m.group(1)) if m else (1 if LOCKED_ANY.search(text or "") else 0)
+
+
+def locked_note(n, have_footage):
+    return (f"🔒 The page keeps **{n} reference file(s)** hidden until you join, and I never log in. After you join "
+            "on Whop: open the campaign → **Reference materials** → open each file and copy its link (Drive / "
+            "Dropbox / YouTube / Google Doc) → tap 🎬 Footage on this campaign's card and paste it. A file you can "
+            "only download: put it in a Drive or Dropbox folder and paste that folder's link."
+            + (" Until then I use the footage I already have." if have_footage else ""))
+
+
 class NeedsPaste(Exception):
     pass
 
@@ -224,7 +242,7 @@ def fetch(url):
 
 def _save(url, text, how):
     """What the page showed, for `!page`."""
-    db.kv_set("last_page", {"url": url, "how": how, "chars": len(text), "text": text[:6000],
+    db.kv_set("last_page", {"url": url, "how": how, "chars": len(text), "text": text[:6000], "locked": locked_files(text),
                             "links": sorted(set(m.group(0) for m in FOOTAGE.finditer(text)))[:30]})
 
 
@@ -235,6 +253,8 @@ def last_page():
     out = [f"Last campaign page: <{p['url']}> (opened by {'a headless browser' if p['how'] == 'browser' else 'a plain download'}, "
            f"{p['chars']:,} characters)"]
     out.append("Footage / reference links found: " + (", ".join(f"<{u}>" for u in p["links"][:15]) or "none"))
+    if p.get("locked"):
+        out.append(f"🔒 {p['locked']} reference file(s) are shown only after you join: copy them by hand (🎬 Footage).")
     out.append("Start of the text:\n" + p["text"][:900])
     return "\n".join(out)[:1900]
 

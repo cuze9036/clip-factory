@@ -203,9 +203,14 @@ def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=
             run(cmd + gpu + tail)
             return {"path": str(out), "duration": dur}
         except RuntimeError as e:
+            import datetime as dt
             from . import db
-            db.kv_set("nvenc_ok", False)
-            db.log(None, f"GPU video encoding failed ({str(e)[-120:]}); using the CPU from now on", "warn")
+            from .util import iso, utcnow
+            # One failure shouldn't mean CPU forever: pause the GPU for 6 hours, then try it again.
+            db.kv_set("nvenc_ok", None)
+            db.kv_set("nvenc_pause_until", iso(utcnow() + dt.timedelta(hours=6)))
+            db.kv_set("nvenc_last_error", str(e)[-300:])
+            db.log(None, f"GPU video encoding failed ({str(e)[-160:]}); using the CPU for 6 hours", "warn")
     run(cmd + cpu + tail)
     return {"path": str(out), "duration": dur}
 
@@ -216,7 +221,9 @@ def use_nvenc(cfg):
     if choice == "cpu":
         return False
     from . import db
-    if db.kv_get("nvenc_ok") is False and choice == "auto":
+    from .util import parse_iso, utcnow
+    pause = db.kv_get("nvenc_pause_until")
+    if choice == "auto" and pause and utcnow() < parse_iso(pause):
         return False
     import subprocess
     try:

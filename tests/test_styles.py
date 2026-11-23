@@ -41,6 +41,20 @@ class StylesTest(unittest.TestCase):
         seen = [pipeline.pick_style(campaigns.get(cid), m, "blur", None, {"id": 9}) for _ in range(5)]
         self.assertEqual(len(set(seen)), 5, seen)                  # 5 remakes, 5 different designs
 
+    def test_gpu_failure_pauses_for_6_hours_not_forever(self):
+        import datetime as dt
+        from unittest import mock
+        from clipfactory import db, render
+        db._local.__dict__.clear()
+        enc = mock.Mock(stdout="V..... h264_nvenc")
+        with mock.patch("subprocess.run", return_value=enc):
+            self.assertTrue(render.use_nvenc({"encoder": "auto"}))
+            db.kv_set("nvenc_pause_until", render.__dict__.get("iso", __import__("clipfactory.util", fromlist=["iso"]).iso)(
+                __import__("clipfactory.util", fromlist=["utcnow"]).utcnow() + dt.timedelta(hours=6)))
+            self.assertFalse(render.use_nvenc({"encoder": "auto"}))
+            db.kv_set("nvenc_pause_until", "2020-01-01T00:00:00Z")
+            self.assertTrue(render.use_nvenc({"encoder": "auto"}))
+
     def test_short_credit_and_clean_title(self):
         from clipfactory import styles
         self.assertEqual(styles.short_credit("Credit: @mby on Instagram & YouTube, @mbyclips on TikTok"), "@mby")

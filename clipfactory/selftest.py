@@ -149,6 +149,10 @@ def _gpu():
         raise _Skip("no NVIDIA GPU found; everything runs on the CPU")
     speech = "CPU (GPU libraries missing)" if db.kv_get("whisper_cpu_only") else "GPU"
     video = "GPU (NVENC)" if render.use_nvenc(config.section("render")) else "CPU"
+    pause = db.kv_get("nvenc_pause_until")
+    if video == "CPU" and pause:
+        video += (f" for now (GPU paused after an error, tries again after {pause[11:16]} UTC: "
+                  f"{(db.kv_get('nvenc_last_error') or '')[-120:]})")
     if not transcribe._nvidia_dirs():
         speech += "; run the installer again to add the GPU libraries"
     return f"captions on {speech}, video encoding on {video}"

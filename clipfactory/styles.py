@@ -163,7 +163,9 @@ LOOK = {
 }
 
 
-def build_ass(style, words, hook, duration, credit="", accent="#FFD400"):
+def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=None):
+    plan = plan or {}
+    emphasis = set(plan.get("emphasis") or [])
     look = LOOK[style]
     acc = ass_colour(accent)
     white = "&H00FFFFFF&"
@@ -182,6 +184,8 @@ def build_ass(style, words, hook, duration, credit="", accent="#FFD400"):
         "16,0,5,90,90,0,1",
         "Style: TitleDark,Montserrat ExtraBold,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,"
         "0,2,5,70,70,0,1",
+        "Style: Hook,Montserrat Black,76,&H00FFFFFF,&H00FFFFFF,&H28000000,&H28000000,0,0,0,0,100,100,0,0,3,"
+        "18,0,5,90,90,0,1",
         "Style: TitleMeme,Bangers,124,&H00000000,&H00000000,&H00FFFFFF,&H00FFFFFF,0,0,0,0,100,100,3,0,1,0,0,5,70,70,0,1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -195,12 +199,19 @@ def build_ass(style, words, hook, duration, credit="", accent="#FFD400"):
             ev.append(f"Dialogue: 2,{_t(0)},{_t(duration)},TitleDark,,0,0,0,,{{\\an5\\pos(540,{y})}}{title}")
         elif style == "meme_top":
             ev.append(f"Dialogue: 2,{_t(0)},{_t(duration)},TitleMeme,,0,0,0,,{{\\an5\\pos(540,{y})}}{title.upper()}")
+    hook_p = plan.get("hook")
+    if hook_p and style in ("bold_crop", "word_pop", "split"):   # big text over the first seconds
+        txt = on_screen_title(hook_p["text"], 40).upper()
+        if txt:
+            ev.append(f"Dialogue: 3,{_t(0)},{_t(min(duration, hook_p.get('until', 1.8)))},Hook,,0,0,0,,"
+                      f"{{\\an5\\pos(540,330)\\fscx70\\fscy70\\t(0,120,\\fscx106\\fscy106)\\t(120,200,\\fscx100\\fscy100)}}{txt}")
     handle = short_credit(credit)
     if handle:
         cy = look["credit_y"]
         colour = acc if style in ("bold_crop", "word_pop", "split") else "&H00FFFFFF&"
         ev.append(f"Dialogue: 1,{_t(0)},{_t(duration)},Credit,,0,0,0,,{{\\an5\\pos(540,{cy})\\c{colour}}}{handle}")
     y, pop = look["cap_y"], look["pop"]
+    index = {id(w): i for i, w in enumerate(words)}
     groups = _groups(words, look["per"])
     for gi, g in enumerate(groups):
         nxt = groups[gi + 1][0]["s"] if gi + 1 < len(groups) else duration
@@ -213,41 +224,49 @@ def build_ass(style, words, hook, duration, credit="", accent="#FFD400"):
             words_txt = [_clean(x["w"]).upper() for x in g]
             if not any(words_txt):
                 continue
-            if look["per"] == 1:   # one word: long words in the accent colour, short ones white
+            big = [index.get(id(x)) in emphasis for x in g]   # emphasised words: bigger, accent colour
+            if look["per"] == 1:   # one word: long or emphasised words in the accent colour, short ones white
                 txt = words_txt[0]
-                colour = acc if len(re.sub(r"[^A-Z]", "", txt)) >= 6 else white
-                text = f"{{\\c{colour}}}{txt}"
+                colour = acc if big[0] or len(re.sub(r"[^A-Z]", "", txt)) >= 6 else white
+                text = f"{{\\c{colour}}}" + (f"{{\\fscx118\\fscy118}}{txt}" if big[0] else txt)
             else:                   # the spoken word in the accent colour
-                text = " ".join(f"{{\\c{acc}}}{t}{{\\c{white}}}" if j == wi else t for j, t in enumerate(words_txt))
+                text = " ".join(
+                    (f"{{\\c{acc}\\fscx122\\fscy122}}{t}{{\\c{white}\\fscx100\\fscy100}}" if big[j] else
+                     f"{{\\c{acc}}}{t}{{\\c{white}}}" if j == wi else t) for j, t in enumerate(words_txt))
             anim = (f"\\fscx{pop}\\fscy{pop}\\t(0,90,\\fscx108\\fscy108)\\t(90,150,\\fscx100\\fscy100)"
                     if wi == 0 else "")
             ev.append(f"Dialogue: 0,{_t(start)},{_t(end)},Cap,,0,0,0,,{{\\an5\\pos(540,{y}){anim}}}{text}")
     return "\n".join(head + ev) + "\n"
 
 
-def video_filter(style, src, facecam=None, duration=10.0):
-    """FFmpeg filter graph from [0:v] to [v0] for a style."""
+def video_filter(style, src, facecam=None, duration=10.0, plan=None, faces=None):
+    """FFmpeg filter graph from [0:v] to [v0] for a style, with the plan's zooms, shakes and flashes."""
+    from . import effects
+    plan = plan or {}
     fps = min(60, max(24, round(src.get("fps") or 30)))
     grade = "eq=contrast=1.06:saturation=1.18,unsharp=5:5:0.5"
     d = max(duration, 1.0)
+    flash = effects.flashes(plan)
     if style in ("bold_crop", "word_pop"):
-        # fill the frame, then a slow push-in (0% -> 7%) so the clip never looks static
-        return (f"[0:v]scale=-2:{H},crop={W}:{H},{grade},"
-                f"scale=w='trunc({W}*(1+0.07*t/{d:.2f})/2)*2':h='trunc({H}*(1+0.07*t/{d:.2f})/2)*2':eval=frame,"
-                f"crop={W}:{H},setsar=1[v0]")
+        # a 9:16 window that follows the speaker's face (centre when there is none), then motion
+        x = effects.x_expr(faces, "ow") if faces else "(iw-ow)/2"
+        return (f"[0:v]crop=w='min(iw,ih*9/16)':h='min(ih,iw*16/9)':x='{x}':y='(ih-oh)/2',scale={W}:{H},setsar=1,"
+                f"{grade},{effects.motion(W, H, plan, d)}{flash}[v0]")
     if style == "blur_box":
         return (f"[0:v]split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
                 f"boxblur=40:2,eq=brightness=-0.22:saturation=1.1[bg];"
-                f"[b]scale=-2:740,crop={W}:740,{grade}[fg];[bg][fg]overlay=0:600,setsar=1[v0]")
+                f"[b]scale=-2:740,crop={W}:740,setsar=1,{grade},{effects.motion(W, 740, plan, d)}[fg];"
+                f"[bg][fg]overlay=0:600,setsar=1{flash}[v0]")
     if style == "black_title":
-        return (f"color=c=black:s={W}x{H}:r={fps}[bg];[0:v]scale=-2:1080,crop=1080:1080,{grade}[fg];"
-                f"[bg][fg]overlay=0:420:shortest=1,setsar=1[v0]")
+        return (f"color=c=black:s={W}x{H}:r={fps}[bg];[0:v]scale=-2:1080,crop=1080:1080,setsar=1,{grade},"
+                f"{effects.motion(1080, 1080, plan, d)}[fg];[bg][fg]overlay=0:420:shortest=1,setsar=1{flash}[v0]")
     if style == "meme_top":
         return (f"color=c=white:s={W}x{H}:r={fps}[bg];[0:v]scale={W}:1400:force_original_aspect_ratio=increase,"
-                f"crop={W}:1400,{grade}[fg];[bg][fg]overlay=0:520:shortest=1,setsar=1[v0]")
+                f"crop={W}:1400,setsar=1,{grade},{effects.motion(W, 1400, plan, d)}[fg];"
+                f"[bg][fg]overlay=0:520:shortest=1,setsar=1{flash}[v0]")
     if style == "split" and facecam:
         fx, fy, fw, fh = facecam
         return (f"[0:v]split[a][b];[a]crop=iw*{fw}:ih*{fh}:iw*{fx}:ih*{fy},scale={W}:960:force_original_aspect_ratio="
-                f"increase,crop={W}:960,{grade}[face];[b]scale=-2:960,crop={W}:960,{grade}[game];"
-                f"[face][game]vstack,setsar=1[v0]")
-    return video_filter("bold_crop", src, None, duration)
+                f"increase,crop={W}:960,setsar=1,{grade}[face];[b]scale=-2:960,crop={W}:960,setsar=1,{grade},"
+                f"{effects.motion(W, 960, plan, d)}[game];[face][game]vstack,setsar=1{flash}[v0]")
+    return video_filter("bold_crop", src, None, duration, plan, faces)

@@ -10,3 +10,6 @@ config.local.yaml
 logs/
 *.egg-info/
 assets/fonts/
+assets/emoji/
+assets/sfx/
+assets/models/

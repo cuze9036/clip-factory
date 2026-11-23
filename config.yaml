@@ -55,6 +55,14 @@ render:
   music_dir: assets/music         # royalty-free tracks; leave empty for none
   music_gain_db: -20
 
+effects:                          # what makes a clip look edited (see clipfactory/effects.py)
+  enabled: true
+  face_tracking: true             # keep the speaker's face in the 9:16 frame (OpenCV YuNet, downloaded once)
+  cut_pauses_over: 0.7            # jump-cut pauses longer than this (seconds)
+  max_zooms: 3                    # punch zooms on the strongest words
+  hook_seconds: 1.8               # big hook text over the first seconds (full-screen styles)
+  sfx_volume: 0.35                # whoosh under each punch zoom
+
 llm:
   # Watching videos: only providers with video: true (Gemini). Text work (titles, guides, campaign pages,
   # reviews, error notes, moments from transcripts) tries text_order first, so the free models do most of it

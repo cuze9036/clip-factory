@@ -78,8 +78,9 @@ def stage_render(c, limit=1):
             style = pick_style(c, m, layout, face, clip)
             res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"],
                                 style=style, accent=styles.accent_for(c["topic"], m["category"] or ""))
-            db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, style=?, status='rendered' WHERE id=?",
-                 res["path"], res["duration"], json.dumps(words), style, clip["id"])
+            db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, style=?, plan=?, status='rendered' WHERE id=?",
+                 res["path"], res["duration"], json.dumps(words), style,
+                 json.dumps(res.get("plan"), ensure_ascii=False) if res.get("plan") else None, clip["id"])
         except Exception as e:
             db.x("UPDATE clips SET status='failed', error=? WHERE id=?", str(e)[:500], clip["id"])
             db.log(c["id"], f"Render failed for clip {clip['id']}: {e}", "error")

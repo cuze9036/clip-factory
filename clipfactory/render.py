@@ -159,25 +159,23 @@ def video_filter(layout, facecam, cfg, src):
             f"[b]scale=-2:{fg_h},crop='min(iw,{W})':{fg_h}[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2[v0]")
 
 
-def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=None, accent=None):
-    """style: one of styles.STYLE_NAMES (the researched viral looks); without it the older layouts are used."""
+def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=None, accent=None, plan=None):
+    """style: one of styles.STYLE_NAMES (the researched viral looks, with effects from an edit plan);
+    without it the older layouts are used. Returns {path, duration, plan}."""
     from . import styles
     cfg = config.section("render")
     raw, out = pathlib.Path(raw), pathlib.Path(out)
+    if style in styles.STYLE_NAMES:
+        return _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg)
     src = ffprobe(raw)
     dur = src["duration"]
     ass = out.with_suffix(".ass")
     fonts = config.path(cfg.get("fonts_dir", "assets/fonts"))
-    if style in styles.STYLE_NAMES:
-        styles.ensure_fonts(fonts)
-        ass.write_text(styles.build_ass(style, words, hook, dur, credit, accent or "#FFD400"), encoding="utf-8")
-        vf = styles.video_filter(style, src, facecam, dur)
+    if layout == "framed":
+        ass.write_text(build_framed_ass(words, hook, dur, cfg, framed_geometry(src, cfg), credit), encoding="utf-8")
     else:
-        if layout == "framed":
-            ass.write_text(build_framed_ass(words, hook, dur, cfg, framed_geometry(src, cfg), credit), encoding="utf-8")
-        else:
-            ass.write_text(build_ass(words, hook, dur, cfg), encoding="utf-8")
-        vf = video_filter(layout, facecam, cfg, src)
+        ass.write_text(build_ass(words, hook, dur, cfg), encoding="utf-8")
+    vf = video_filter(layout, facecam, cfg, src)
     fps = f",fps={cfg.get('max_fps', 60)}" if src["fps"] > cfg.get("max_fps", 60) + 0.5 else ""
     fontsdir = f":fontsdir='{_escape_filter_path(fonts)}'" if fonts.is_dir() else ""
     vf += f";[v0]ass='{_escape_filter_path(ass)}'{fontsdir}{fps},format=yuv420p[v]"
@@ -195,13 +193,80 @@ def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=
     else:
         af = f"[0:a]loudnorm=I={lufs}:TP=-1.5:LRA=11[a]"
     cmd += ["-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}"]
-    tail = ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", out]
+    _encode(cmd, out, cfg)
+    return {"path": str(out), "duration": dur, "plan": None}
+
+
+def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg):
+    from . import effects, styles
+    fonts = styles.ensure_fonts(config.path(cfg.get("fonts_dir", "assets/fonts")))
+    src = ffprobe(raw)
+    dur = src["duration"]
+    eff = config.section("effects")
+    on = eff.get("enabled", True)
+    if plan is None:
+        plan = effects.auto_plan(words, dur, hook, style) if on else {}
+    plan = effects.clean(plan, dur)
+    used = dict(plan)
+    base = raw
+    if plan["cuts"]:   # jump cuts first, then everything on the new timeline
+        spans = effects.keep_spans(plan["cuts"], dur)
+        base = out.with_name(out.stem + "_cut.mp4")
+        effects.cut_video(raw, spans, base)
+        words, plan = effects.apply_cuts(words, plan, spans)
+        src = ffprobe(base)
+        dur = src["duration"]
+    faces = None
+    if on and eff.get("face_tracking", True) and style in ("bold_crop", "word_pop"):
+        faces = effects.face_track(base)
+    ass = out.with_suffix(".ass")
+    ass.write_text(styles.build_ass(style, words, hook, dur, credit, accent or "#FFD400", plan), encoding="utf-8")
+    vf = styles.video_filter(style, src, facecam, dur, plan, faces)
+
+    inputs, n, chain = ["-i", str(base)], 1, "[v0]"
+    for k, e in enumerate(plan.get("emojis", [])):
+        png = effects.emoji_png(e["emoji"])
+        if not png:
+            continue
+        inputs += ["-loop", "1", "-i", str(png)]
+        y = styles.LOOK[style]["cap_y"] - 240
+        vf += (f";[{n}:v]scale=150:150,format=rgba[e{k}];{chain}[e{k}]overlay=x=465:y={y}:shortest=1:"
+               f"enable='between(t,{e['t']:.2f},{e['t'] + e['dur']:.2f})'[ve{k}]")
+        chain, n = f"[ve{k}]", n + 1
+    fps = f",fps={cfg.get('max_fps', 60)}" if src["fps"] > cfg.get("max_fps", 60) + 0.5 else ""
+    vf += f";{chain}ass='{_escape_filter_path(ass)}':fontsdir='{_escape_filter_path(fonts)}'{fps},format=yuv420p[v]"
+
+    lufs = cfg.get("loudness_lufs", -14)
+    if src["has_audio"]:
+        af = f"[0:a]loudnorm=I={lufs}:TP=-1.5:LRA=11[voice]"
+    else:
+        inputs += ["-f", "lavfi", "-t", f"{dur:.2f}", "-i", "anullsrc=r=48000:cl=stereo"]
+        af, n = f"[{n}:a]anull[voice]", n + 1
+    hits = []
+    for k, s in enumerate(plan.get("sfx", [])):
+        inputs += ["-i", str(effects.sfx_file(s["kind"]))]
+        ms = int(s["t"] * 1000)
+        af += f";[{n}:a]adelay={ms}|{ms},volume={eff.get('sfx_volume', 0.35)}[s{k}]"
+        hits.append(f"[s{k}]")
+        n += 1
+    af += (f";[voice]{''.join(hits)}amix=inputs={1 + len(hits)}:duration=first:normalize=0[a]" if hits
+           else ";[voice]anull[a]")
+    cmd = ["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", f"{vf};{af}", "-map", "[v]", "-map", "[a]",
+           "-t", f"{dur:.2f}"]
+    _encode(cmd, out, cfg)
+    if base != raw:
+        pathlib.Path(base).unlink(missing_ok=True)
+    return {"path": str(out), "duration": dur, "plan": used}
+
+
+def _encode(cmd, out, cfg):
+    tail = ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out)]
     cpu = ["-c:v", "libx264", "-preset", cfg.get("preset", "medium"), "-crf", str(cfg.get("crf", 20))]
     if use_nvenc(cfg):
         gpu = ["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", str(cfg.get("crf", 20) + 1), "-b:v", "0"]
         try:
             run(cmd + gpu + tail)
-            return {"path": str(out), "duration": dur}
+            return
         except RuntimeError as e:
             import datetime as dt
             from . import db
@@ -212,7 +277,6 @@ def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=
             db.kv_set("nvenc_last_error", str(e)[-300:])
             db.log(None, f"GPU video encoding failed ({str(e)[-160:]}); using the CPU for 6 hours", "warn")
     run(cmd + cpu + tail)
-    return {"path": str(out), "duration": dur}
 
 
 def use_nvenc(cfg):

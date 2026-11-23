@@ -53,7 +53,7 @@ class WhopPageTest(unittest.TestCase):
 
 class LaneTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import campaigns, db
         db._local.__dict__.clear()
@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
 class FootagePasteTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import campaigns, db, joinflow
         db._local.__dict__.clear()
@@ -244,7 +244,7 @@ class ContentRewardsLinkTest(unittest.TestCase):
                "TikTok, and X. Earn $1-$3 per 1,000 views, up to $300 per clip, $12.2K budget left.")
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import campaigns, db, joinflow
         db._local.__dict__.clear()
@@ -279,7 +279,7 @@ class BrowserPageTest(unittest.TestCase):
     """Pages that load the brief with JavaScript: opened in a headless browser with no login."""
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import db
         db._local.__dict__.clear()

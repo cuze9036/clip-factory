@@ -17,7 +17,7 @@ AI = ({"summary": "Evening Instagram posts did best; morning ones were weak.",
 
 class InsightsTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import db
         db._local.__dict__.clear()

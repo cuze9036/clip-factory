@@ -13,7 +13,7 @@ KEYS = {"GEMINI_API_KEY": "g", "FREE_LLM_BASE_URL": "http://free.example/v1", "F
 
 class RouterTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         os.environ.update(KEYS)
         from clipfactory import db, llm

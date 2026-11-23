@@ -53,7 +53,7 @@ GUIDE_AI = ({"do": ["Always show the band name"], "avoid": ["No sponsor parts"],
 
 class DriveTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import db
         db._local.__dict__.clear()
@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
 class BlockedLinksTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import db
         db._local.__dict__.clear()

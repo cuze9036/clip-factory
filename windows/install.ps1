@@ -219,8 +219,17 @@ Pop-Location
 # 6. Auto-start
 Step "6/7 Starting Clip Factory automatically at login and when the internet connects"
 $startScript = Join-Path $Target "windows\start.ps1"
-$action = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$startScript`"" -WorkingDirectory $Target
+# Windows 11 opens console programs in Windows Terminal, which ignores -WindowStyle Hidden: an empty window
+# appears, and closing it kills the runner (no updates, no restarts). conhost --headless runs it with no window.
+function Hidden-Action($script) {
+    $conhost = Join-Path $env:WINDIR "System32\conhost.exe"
+    $ps = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
+    if (Test-Path $conhost) {
+        return New-ScheduledTaskAction -Execute $conhost -Argument "--headless powershell.exe $ps" -WorkingDirectory $Target
+    }
+    return New-ScheduledTaskAction -Execute "powershell.exe" -Argument $ps -WorkingDirectory $Target
+}
+$action = Hidden-Action $startScript
 $atLogon = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
 $cls = Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace Root/Microsoft/Windows/TaskScheduler
 $onNetwork = $cls | New-CimInstance -ClientOnly
@@ -235,8 +244,7 @@ Ok "Task '$TaskName' added to Task Scheduler"
 
 # Tells the offline-alert service the moment Windows shuts down, restarts or sleeps. Optional: never stops the install.
 try {
-    $pingAction = New-ScheduledTaskAction -Execute "powershell.exe" `
-        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $Target "windows\offline-ping.ps1")`"" -WorkingDirectory $Target
+    $pingAction = Hidden-Action (Join-Path $Target "windows\offline-ping.ps1")
     $onOff = $cls | New-CimInstance -ClientOnly
     $onOff.Enabled = $true
     $onOff.Subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''User32''] and EventID=1074]]</Select><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Kernel-Power''] and EventID=42]]</Select></Query></QueryList>'

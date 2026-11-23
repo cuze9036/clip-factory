@@ -42,7 +42,7 @@ GUIDE = ({"do": ["Start on the loudest crowd moment", "Show the band name on scr
 
 class DropboxGuideTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import db
         db._local.__dict__.clear()

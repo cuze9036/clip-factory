@@ -21,7 +21,7 @@ def _words(text, pause_at=None, pause=1.4):
 
 class EffectsTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
 
     def tearDown(self):
@@ -98,9 +98,17 @@ class EffectsTest(unittest.TestCase):
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1280x720:r=10:d=3",
                         "-c:v", "libx264", "-preset", "ultrafast", plain], check=True)
         boxed = os.path.join(self.tmp.name, "boxed.mp4")
+        # drawtext without a font file crashes ffmpeg on Windows (no fontconfig), so hand it one when there is one
+        font = next((f for f in (r"C:\Windows\Fonts\arialbd.ttf", r"C:\Windows\Fonts\arial.ttf",
+                                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf") if os.path.exists(f)), None)
+        fontfile = ""
+        if font:
+            shutil.copy(font, os.path.join(self.tmp.name, "f.ttf"))
+            fontfile = "fontfile=f.ttf:"
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", plain, "-vf",
-                        "drawtext=text='THE CROWD WENT WILD':fontcolor=white:fontsize=72:borderw=6:bordercolor=black:"
-                        "x=(w-tw)/2:y=h*0.72", "-c:v", "libx264", "-preset", "ultrafast", boxed], check=True)
+                        f"drawtext={fontfile}text='THE CROWD WENT WILD':fontcolor=white:fontsize=72:borderw=6:"
+                        "bordercolor=black:x=(w-tw)/2:y=h*0.72", "-c:v", "libx264", "-preset", "ultrafast", boxed],
+                       check=True, cwd=self.tmp.name)
         self.assertTrue(effects.has_burned_captions(boxed))
         self.assertFalse(effects.has_burned_captions(plain))
         db._local.__dict__.clear()

@@ -18,7 +18,7 @@ NO = ({"verdict": "no", "summary": "Needs face-cam reaction videos filmed by you
 
 class CheckTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import campaigns, db
         db._local.__dict__.clear()

@@ -16,6 +16,13 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $mutex = New-Object System.Threading.Mutex($false, "Local\ClipFactoryRunner")
 if (-not $mutex.WaitOne(0)) { exit 0 }   # already running
 
+# This runner holds the mutex, so a pipeline or dashboard of this folder that is still running was left by a
+# runner that died (e.g. its window was closed). Stop it, or Discord gets two bots and port 8787 stays taken.
+Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -in @("clipfactory.exe", "python.exe", "pythonw.exe") -and $_.CommandLine -and
+    $_.CommandLine.Contains($Root) -and $_.CommandLine -match 'clipfactory(\.exe)?"?\s+(run|dashboard)\s*$'
+} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
 function Log($text) { Add-Content -Path (Join-Path $Logs "runner.log") -Value "$(Get-Date -Format s)  $text" }
 
 function Online {

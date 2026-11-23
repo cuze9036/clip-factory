@@ -12,7 +12,7 @@ from unittest import mock
 
 class HealthTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ.update(CLIPFACTORY_DATA=self.tmp.name, DISCORD_CHANNEL_ID="1", DISCORD_OWNER_ID="2",
                           DISCORD_BOT_TOKEN="x")
         from clipfactory import db

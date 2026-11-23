@@ -17,7 +17,7 @@ def _listing(title, budget=12000, rate=2.0, clippers=9):
 
 class JoinFlowTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         os.environ["CLIPFACTORY_DATA"] = self.tmp.name
         from clipfactory import db
         db._local.__dict__.clear()

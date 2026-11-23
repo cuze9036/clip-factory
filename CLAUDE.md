@@ -32,6 +32,7 @@ Review cards have 🔁 Re-edit (`reedit.py`, `!reedit`): new titles, start earli
 Paid campaigns: #Sponsored (or the campaign's #<Brand>Ad) on the first line of every caption; YouTube paid-promotion flag.
 AI router (`llm.py`): text work tries `llm.text_order` (free-llm → gemini → ollama); watching videos uses Gemini only (local files are uploaded to Gemini); with ANTHROPIC_API_KEY, Claude (claude-opus-5-5, `daily_budget_usd` 0.50) does only `llm.claude_tasks` first; `!ai` shows usage and Claude spend.
 Weekly self-review (`insights.py`, `!insights`): free AI only (Gemini / FreeLLMAPI, never Claude) reads last week's views by platform, slot, moment type, campaign; saves title/moment tips into every AI prompt and skips a clearly weak slot (bounded); everything else is a suggestion on Discord.
+Languages: footage in any language is used (Whisper `multilingual_model` translates speech into English captions; titles/hooks always English) unless the campaign's rules or guide say English only (`analyst.english_only`), or `moments.english_only: true`.
 Keys go in with `windows\set-key.ps1 <NAME>` (hidden input), never in chat.
 Next: join the first campaign from #campaign-updates (owner joins on Whop). Later: X API, TikTok API.
 

@@ -19,7 +19,15 @@ def stage_analyze(c, limit=1):
     for v in db.q("SELECT * FROM videos WHERE campaign_id=? AND status='new' ORDER BY created_at LIMIT ?", c["id"], limit):
         db.x("UPDATE videos SET status='analyzing' WHERE id=? AND campaign_id=?", v["id"], c["id"])
         try:
-            moments.analyze(v, c)
+            if config.section("analyst").get("enabled", True):
+                try:   # understand the whole video first, then plan the clips
+                    from . import analyst
+                    analyst.analyze(v, c)
+                except Exception as e:
+                    db.log(c["id"], f"Full video analysis failed, using the quick moment finder: {str(e)[:200]}", "warn")
+                    moments.analyze(v, c)
+            else:
+                moments.analyze(v, c)
         except Exception as e:
             db.x("UPDATE videos SET status='failed', error=? WHERE id=? AND campaign_id=?", str(e)[:500], v["id"], c["id"])
             db.log(c["id"], f"Finding moments failed for {v['title']}: {e}", "error")
@@ -50,6 +58,22 @@ def _source_layout(v):
         return default, None
     layout = default if s["layout"] in (None, "", "blur", "auto") else s["layout"]
     return layout, json.loads(s["facecam"]) if s["facecam"] else None
+
+
+def director_plan(m, words):
+    """The edit the director planned for this moment (None = the automatic edit)."""
+    try:
+        p = json.loads(m.get("plan") or "null")
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(p, dict):
+        return None
+    wanted = set(p.pop("emphasis_words", []) or [])
+    p["emphasis"] = [i for i, w in enumerate(words)
+                     if "".join(ch for ch in w["w"].lower() if ch.isalpha()) in wanted][:6]
+    if not p.get("hook") and m.get("hook"):
+        p["hook"] = {"text": m["hook"], "until": config.section("effects").get("hook_seconds", 1.8)}
+    return p
 
 
 def want_captions(c, v, raw_path):
@@ -103,7 +127,7 @@ def stage_render(c, limit=1):
             style = pick_style(c, m, layout, face, clip, captions)
             res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"],
                                 style=style, accent=styles.accent_for(c["topic"], m["category"] or ""),
-                                captions=captions)
+                                captions=captions, plan=director_plan(m, words))
             db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, style=?, plan=?, status='rendered' WHERE id=?",
                  res["path"], res["duration"], json.dumps(words), style,
                  json.dumps(res.get("plan"), ensure_ascii=False) if res.get("plan") else None, clip["id"])

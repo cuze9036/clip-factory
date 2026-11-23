@@ -4,7 +4,7 @@ Owner writes Hindi/Hinglish: reply in simple Hindi, commands in English. Everyth
 
 ## What it is
 Python tool in this folder that earns from Whop clipping campaigns (paid per 1K views) and runs the owner's GTA 6 channel. Each campaign is a lane (sources, rules, budget, quota).
-Flow: `discovery.py` (Apify listings every 6 h + #campaign-feed → suggested campaigns → `board.py` cards) → `watcher.py` (YouTube/Twitch/folder/Dropbox share links/Google Drive via `gdrive.py`) → `moments.py` (Gemini watches YouTube; else transcript + `llm.py` router) → `download.py` → `render.py` (1080x1920, captions) → `metadata.py` → `review.py` (score ≥ 9 auto-approves) → `schedule.py` (US Eastern slots) → `publish.py` (API where keys exist; else video + caption to Telegram/Discord for the owner to post) → `analytics.py`.
+Flow: `discovery.py` (Apify listings every 6 h + #campaign-feed → suggested campaigns → `board.py` cards) → `watcher.py` (YouTube/Twitch/folder/Dropbox share links/Google Drive via `gdrive.py`) → `analyst.py` (Gemini watches the whole video, YouTube or uploaded local files, and writes a scene report; the director (Claude if ANTHROPIC_API_KEY, else free AI) plans clips + edits; report posted on Discord; falls back to `moments.py`) → `download.py` → `render.py` (1080x1920, captions) → `metadata.py` → `review.py` (score ≥ 9 auto-approves) → `schedule.py` (US Eastern slots) → `publish.py` (API where keys exist; else video + caption to Telegram/Discord for the owner to post) → `analytics.py`.
 
 ## Where things happen (keep it this way)
 - Discord (`discord_bot.py`, `commands.py`): all control, alerts, buttons, commands.
@@ -30,7 +30,7 @@ Effects (`effects.py`, `effects:` in config): every styled clip gets an edit pla
 Review cards show the style; approve/auto-approve replies list each platform, time (ET + IST) and who posts; `!queue` shows what goes out next.
 Review cards have 🔁 Re-edit (`reedit.py`, `!reedit`): new titles, start earlier/later, longer/shorter, different style, different moment, or a typed note the free AI turns into those changes.
 Paid campaigns: #Sponsored (or the campaign's #<Brand>Ad) on the first line of every caption; YouTube paid-promotion flag.
-AI router (`llm.py`): text work tries `llm.text_order` (free-llm → gemini → ollama); watching videos uses Gemini only; `!ai` shows usage per provider.
+AI router (`llm.py`): text work tries `llm.text_order` (free-llm → gemini → ollama); watching videos uses Gemini only (local files are uploaded to Gemini); with ANTHROPIC_API_KEY, Claude (claude-opus-5-5, `daily_budget_usd` 0.50) does only `llm.claude_tasks` first; `!ai` shows usage and Claude spend.
 Weekly self-review (`insights.py`, `!insights`): free AI only (Gemini / FreeLLMAPI, never Claude) reads last week's views by platform, slot, moment type, campaign; saves title/moment tips into every AI prompt and skips a clearly weak slot (bounded); everything else is a suggestion on Discord.
 Keys go in with `windows\set-key.ps1 <NAME>` (hidden input), never in chat.
 Next: join the first campaign from #campaign-updates (owner joins on Whop). Later: X API, TikTok API.

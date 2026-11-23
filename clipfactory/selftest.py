@@ -205,6 +205,14 @@ def _drive():
         raise _Skip(str(e))
 
 
+def _claude():
+    ps = [p for p in llm.providers() if p["type"] == "anthropic"]
+    if not ps:
+        raise _Skip("ANTHROPIC_API_KEY not set, so the free AI does the thinking (that's fine)")
+    return (f"{ps[0]['model']} plans the clips; spent today ${llm.claude_spent_today():.2f} of "
+            f"${float(ps[0].get('daily_budget_usd', 0.5)):.2f}")
+
+
 def _bugs():
     from . import bugreport
     if not bugreport.configured():
@@ -228,7 +236,7 @@ CHECKS = [
     ("Making a clip (first run downloads the speech model, about 500 MB)", _render),
     ("GPU", _gpu), ("Gmail audit watcher", _gmail), ("Offline alert", _heartbeat),
     ("Instagram posting", _meta("instagram")), ("Facebook posting", _meta("facebook")),
-    ("Bug reports to Claude Code", _bugs), ("Google Drive (private campaign folders)", _drive),
+    ("Bug reports to Claude Code", _bugs), ("Claude (thinking tasks)", _claude), ("Google Drive (private campaign folders)", _drive),
 ]
 
 

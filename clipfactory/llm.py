@@ -94,8 +94,12 @@ def _gemini(p, prompt, video):
         meta = {"start_offset": f"{int(video['start'])}s", "end_offset": f"{int(video['end'])}s"}
         if video.get("fps"):
             meta["fps"] = video["fps"]
-        parts.append(types.Part(file_data=types.FileData(file_uri=video["url"]),
-                                video_metadata=types.VideoMetadata(**meta)))
+        if video.get("path"):   # a local file (Dropbox, Drive, folder): upload it so Gemini can watch it
+            up = upload_video(client, video["path"])
+            fd = types.FileData(file_uri=up["uri"], mime_type=up["mime"])
+        else:
+            fd = types.FileData(file_uri=video["url"])
+        parts.append(types.Part(file_data=fd, video_metadata=types.VideoMetadata(**meta)))
     parts.append(types.Part(text=prompt))
     cfg = types.GenerateContentConfig(
         response_mime_type="application/json", temperature=0.4,
@@ -103,6 +107,63 @@ def _gemini(p, prompt, video):
     )
     r = client.models.generate_content(model=p["model"], contents=types.Content(role="user", parts=parts), config=cfg)
     return r.text
+
+
+def upload_video(client, path):
+    """Upload a local video to Gemini once (kept ~2 days by Google) and wait until it can be watched."""
+    import os
+    st = os.stat(path)
+    key = f"gemini_file:{path}:{st.st_size}"
+    known = db.kv_get(key)
+    if known and utcnow().timestamp() - known["at"] < 40 * 3600:
+        return known
+    f = client.files.upload(file=str(path))
+    waited = 0
+    while str(getattr(f.state, "name", f.state)) == "PROCESSING" and waited < 900:
+        time.sleep(5)
+        waited += 5
+        f = client.files.get(name=f.name)
+    if str(getattr(f.state, "name", f.state)) != "ACTIVE":
+        raise RuntimeError(f"Gemini couldn't process the video ({getattr(f.state, 'name', f.state)})")
+    out = {"uri": f.uri, "mime": f.mime_type or "video/mp4", "at": utcnow().timestamp()}
+    db.kv_set(key, out)
+    return out
+
+
+PRICES = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0), "claude-haiku-5-5": (0.10, 0.50)}
+
+
+class BudgetExceeded(Exception):
+    pass
+
+
+def claude_spent_today():
+    return db.kv_get("claude_usd:" + utcnow().date().isoformat()) or 0.0
+
+
+def _claude(p, prompt):
+    """Claude (Anthropic API) for the thinking work. Stops for the day at daily_budget_usd."""
+    import anthropic
+    budget = float(p.get("daily_budget_usd", 0.5))
+    if claude_spent_today() >= budget:
+        raise BudgetExceeded(f"Claude's daily budget (${budget:.2f}) is used up; free AI takes over until tomorrow")
+    client = _clients.get(p["name"]) or anthropic.Anthropic(api_key=p["api_key"], timeout=600)
+    _clients[p["name"]] = client
+    kwargs = dict(model=p["model"], max_tokens=16000, system="Reply with valid JSON only, in American English.",
+                  messages=[{"role": "user", "content": prompt}],
+                  output_config={"effort": p.get("effort", "medium")})
+    try:   # on a safety decline, Anthropic re-runs it on a fallback model inside the same call
+        r = client.beta.messages.create(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
+    except TypeError:
+        r = client.messages.create(**kwargs)
+    pin, pout = PRICES.get(p["model"], (4.0, 20.0))
+    u = r.usage
+    cost = ((u.input_tokens or 0) + (getattr(u, "cache_creation_input_tokens", 0) or 0)) * pin / 1e6 \
+        + (getattr(u, "cache_read_input_tokens", 0) or 0) * pin * 0.1 / 1e6 + (u.output_tokens or 0) * pout / 1e6
+    db.kv_set("claude_usd:" + utcnow().date().isoformat(), round(claude_spent_today() + cost, 4))
+    if r.stop_reason == "refusal":
+        raise RuntimeError("Claude declined this request")
+    return "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
 
 
 def _openai(p, prompt):
@@ -157,6 +218,9 @@ def usage(days=1):
         lines.append(f"• **{name}**: {t['ok']} answers, {t['fail']} failed" + (f" · {top}" if top else ""))
     order = config.section("llm").get("text_order") or []
     lines.append("Text work tries " + " → ".join(order) + "; watching videos uses Gemini.")
+    if any(p["type"] == "anthropic" for p in providers()):
+        budget = next(float(p.get("daily_budget_usd", 0.5)) for p in providers() if p["type"] == "anthropic")
+        lines.append(f"Claude today: ${claude_spent_today():.2f} of ${budget:.2f} (thinking tasks only).")
     return "\n".join(lines)
 
 
@@ -174,12 +238,19 @@ def complete_json(task, prompt, validate, video=None):
     order = config.section("llm").get("text_order") or []
     if not video and order:   # text work: the free models first, Gemini as the fallback
         tried.sort(key=lambda p: order.index(p["name"]) if p["name"] in order else len(order))
+    # Claude (when its key is set) only does the thinking tasks, first; everything else stays on the free AI.
+    thinking = set(config.section("llm").get("claude_tasks") or [])
+    claude = [p for p in tried if p["type"] == "anthropic"]
+    tried = [p for p in tried if p["type"] != "anthropic"]
+    if task in thinking and not video:
+        tried = claude + tried
     if all(p.get("optional") for p in tried):
         errors.append("no LLM provider configured (set GEMINI_API_KEY or FREE_LLM_* in .env)")
     for p in tried:
         for attempt in range(2):
             try:
-                text = _gemini(p, prompt, video) if p["type"] == "gemini" else _openai(p, prompt)
+                text = (_gemini(p, prompt, video) if p["type"] == "gemini" else
+                        _claude(p, prompt) if p["type"] == "anthropic" else _openai(p, prompt))
                 data = validate(parse_json(text))
                 db.x("INSERT OR REPLACE INTO llm_cache(key, provider, response, created_at) VALUES(?,?,?,?)",
                      key, p["name"], json.dumps(data), iso(utcnow()))
@@ -188,6 +259,9 @@ def complete_json(task, prompt, validate, video=None):
             except (Invalid, json.JSONDecodeError, ValueError, KeyError, TypeError) as e:
                 errors.append(f"{p['name']}: invalid output ({e})")
                 _count(p["name"], task, False)
+            except BudgetExceeded as e:
+                errors.append(f"{p['name']}: {e}")
+                break
             except Exception as e:
                 errors.append(f"{p['name']}: {str(e)[:200]}")
                 _count(p["name"], task, False)

@@ -55,6 +55,10 @@ render:
   music_dir: assets/music         # royalty-free tracks; leave empty for none
   music_gain_db: -20
 
+analyst:                          # understand the whole video first, then plan the clips (clipfactory/analyst.py)
+  enabled: true
+  part_minutes: 15                # Gemini watches the video in parts this long
+
 effects:                          # what makes a clip look edited (see clipfactory/effects.py)
   enabled: true
   face_tracking: true             # keep the speaker's face in the 9:16 frame (OpenCV YuNet, downloaded once)
@@ -68,7 +72,16 @@ llm:
   # reviews, error notes, moments from transcripts) tries text_order first, so the free models do most of it
   # and Gemini's quota is kept for watching videos. Providers with no key set are skipped.
   text_order: [free-llm, gemini, ollama]
+  # With ANTHROPIC_API_KEY set, Claude does only these thinking tasks (first), within its daily budget;
+  # without the key, or once the budget is used up, the free AI does them.
+  claude_tasks: [video_plan, reedit, insights, campaign_guide, diagnose]
   providers:
+    - name: claude
+      type: anthropic
+      model: claude-opus-5-5      # best quality; claude-sonnet-5-5 or claude-haiku-5-5 cost less
+      api_key_env: ANTHROPIC_API_KEY
+      daily_budget_usd: 0.50      # never spends more than this a day (about $15 a month at most)
+      effort: medium
     - name: gemini
       type: gemini
       model: gemini-3.5-flash     # Google retired gemini-2.5-flash for new keys

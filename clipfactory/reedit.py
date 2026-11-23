@@ -91,7 +91,8 @@ def _recut(clip, start_shift, end_shift, hint=""):
         end = start + hi
     _stop_posts(clip["id"])
     db.x("UPDATE clips SET status='rejected', reject_reason='re-edited' WHERE id=?", clip["id"])
-    db.x("UPDATE moments SET start_s=?, end_s=?, status='found' WHERE id=?", round(start, 2), round(end, 2), m["id"])
+    db.x("UPDATE moments SET start_s=?, end_s=?, status='found', plan=NULL WHERE id=?", round(start, 2), round(end, 2),
+         m["id"])   # new bounds: the old edit's times no longer fit, so the automatic edit is used
     if hint:
         db.kv_set(f"title_hint:{m['id']}", hint)
     db.kv_set("watcher_now", True)

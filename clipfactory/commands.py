@@ -610,6 +610,9 @@ def card_button(kind, cid):
 def brief(cid, text):
     """The campaign page (or a footage link) pasted after tapping "I joined"."""
     from . import joinflow
+    from . import whop_page
+    if whop_page.WHOP.search(text):   # the campaign link (with or without Discord's preview): open the page
+        return joinflow.add_footage(cid, text)
     if len(text) < 300 and re.fullmatch(r"(\s*<?(https?://\S+|[A-Za-z]:\\.+|@[\w.-]+)>?\s*)+", text):
         return joinflow.add_footage(cid, text)   # only links: each one is footage (or the Whop page)
     try:

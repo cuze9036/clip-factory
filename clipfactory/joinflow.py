@@ -169,6 +169,24 @@ def add_footage(cid, text):
     if not c:
         return f"No campaign `{cid}`."
     text = (text or "").strip()
+    from . import whop_page
+    page = whop_page.WHOP.search(text)
+    if page:   # a campaign link (Whop / Content Rewards): open the page itself, not just Discord's short preview
+        url = page.group(0).rstrip(".,")
+        try:
+            body = whop_page.fetch(url)
+        except whop_page.NeedsPaste as e:
+            if len(text) < 600:   # only the link and its preview: not enough to go on
+                return f"**{c['name']}**: {e}"
+            body = ""
+        extra = campaigns._extra(campaigns.get(cid))
+        extra["whop_url"] = url
+        db.x("UPDATE campaigns SET notes=?, url=COALESCE(NULLIF(url, ''), ?) WHERE id=?", json.dumps(extra), url, cid)
+        try:
+            return apply_brief(cid, "\n\n".join(t for t in (body, text) if t) + f"\n\nCampaign page: {url}")
+        except Exception as e:
+            db.log(cid, f"Reading the campaign page failed: {e}", "error")
+            return f"Couldn't read that page: {str(e)[:300]}. Try again, or paste the page text."
     if len(text) > 300 or text.count("\n") > 4:   # a whole post or page, not just links
         try:
             return apply_brief(cid, text)
@@ -178,7 +196,7 @@ def add_footage(cid, text):
     short = len(text.split()) <= 3   # "@handle" counts as a YouTube channel only when sent on its own
     links = re.findall(r"https?://\S+|[A-Za-z]:\\[^\n]+" + (r"|@[\w.-]+" if short else ""), text)
     links = list(dict.fromkeys(u.strip().strip("<>").rstrip(").,") for u in links))
-    social = [u for u in links if campaigns.NOT_FOOTAGE.search(u) and "whop.com" not in u.lower()]
+    social = [u for u in links if campaigns.NOT_FOOTAGE.search(u) and not whop_page.WHOP.search(u)]
     links = [u for u in links if u not in social]
     if not links:
         if social:
@@ -199,8 +217,8 @@ def add_link(cid, line):
         from . import gdrive
         db.kv_set(AWAIT_KEY, None)
         return gdrive.explore(cid, line)
-    if "whop.com" in line:   # read the campaign page the way anyone without an account sees it (no login)
-        from . import whop_page
+    from . import whop_page
+    if whop_page.WHOP.search(line):   # read the campaign page the way anyone without an account sees it (no login)
         try:
             return whop_page.read_into(cid, line)
         except whop_page.NeedsPaste as e:
@@ -326,6 +344,7 @@ def from_feed(text, message_id):
     data, provider = campaigns.extract_from_brief(text)
     if not data.get("url"):
         links = [u.rstrip(').,') for u in re.findall(r"https?://\S+", text) if "discord" not in u]
-        data["url"] = next((u for u in links if "whop.com" in u), links[0] if links else "")
+        from . import whop_page
+        data["url"] = next((u for u in links if whop_page.WHOP.search(u)), links[0] if links else "")
     cid, _ = discovery.add_from_data(data, text, provider, key, origin="feed", notify_always=True)
     return cid

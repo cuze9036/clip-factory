@@ -219,12 +219,56 @@ class FootagePasteTest(unittest.TestCase):
 
     def test_whop_link_is_kept_and_social_links_skipped(self):
         from clipfactory import commands, joinflow
+        drop = "https://www.dropbox.com/scl/fo/abc/x?rlkey=1"
         with mock.patch.object(joinflow, "add_link", return_value="ok") as al:
-            out = commands.pasted("kn", "https://whop.com/kitsch/clips/ https://instagram.com/kitsch")
-        al.assert_called_once_with("kn", "https://whop.com/kitsch/clips/")
+            out = commands.pasted("kn", drop + " https://instagram.com/kitsch")
+        al.assert_called_once_with("kn", drop)
         self.assertIn("Skipped 1 social media link", out)
+        from clipfactory import whop_page
+        joinflow.expect("kn", "source")
+        with mock.patch.object(whop_page, "fetch", return_value="page " * 100), \
+                mock.patch.object(joinflow, "apply_brief", return_value="read") as ab:
+            self.assertEqual(commands.pasted("kn", "https://whop.com/kitsch/clips/ https://instagram.com/k"), "read")
+        ab.assert_called_once()
 
     def test_only_social_links_get_a_plain_answer(self):
         from clipfactory import commands
         out = commands.pasted("kn", "https://www.tiktok.com/@kitsch/video/123")
         self.assertIn("not footage", out)
+
+
+class ContentRewardsLinkTest(unittest.TestCase):
+    LINK = "https://contentrewards.com/c/campaigns/0afd04db-e183-4411-9957-0b890ef272b5"
+    PREVIEW = ("Content Rewards\nCall of Duty MW4 V2: Earn $1-$3 per 1K Views\nClip for Arabic Clipping on Instagram, "
+               "TikTok, and X. Earn $1-$3 per 1,000 views, up to $300 per clip, $12.2K budget left.")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["CLIPFACTORY_DATA"] = self.tmp.name
+        from clipfactory import campaigns, db, joinflow
+        db._local.__dict__.clear()
+        campaigns.save("cod", {"name": "Call of Duty MW4 V2", "platforms": ["instagram"], "rules": []}, "pasted")
+        joinflow.expect("cod", "source")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_content_rewards_page_is_opened_not_just_the_preview(self):
+        from clipfactory import campaigns, commands, joinflow, whop_page
+        page = "Brief: use the footage at https://drive.google.com/drive/folders/FOOTAGE1234567890 ..." * 3
+        with mock.patch.object(whop_page, "fetch", return_value=page) as f, \
+                mock.patch.object(joinflow, "apply_brief", return_value="read") as ab:
+            self.assertEqual(commands.pasted("cod", self.LINK + "\n" + self.PREVIEW), "read")
+        f.assert_called_once_with(self.LINK)
+        sent = ab.call_args.args[1]
+        self.assertIn("drive.google.com/drive/folders/FOOTAGE1234567890", sent)   # from the page
+        self.assertIn("up to $300 per clip", sent)                                 # the preview too
+        self.assertEqual(campaigns._extra(campaigns.get("cod"))["whop_url"], self.LINK)
+
+    def test_login_wall_with_only_a_preview_asks_for_a_paste(self):
+        from clipfactory import commands, joinflow, whop_page
+        with mock.patch.object(whop_page, "fetch", side_effect=whop_page.NeedsPaste(whop_page.PASTE_HELP)), \
+                mock.patch.object(joinflow, "apply_brief") as ab:
+            out = commands.pasted("cod", self.LINK + "\n" + self.PREVIEW)
+        ab.assert_not_called()
+        self.assertIn("Ctrl+A", out)

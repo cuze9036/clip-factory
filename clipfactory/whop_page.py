@@ -14,7 +14,8 @@ import requests
 
 from . import db
 
-WHOP = re.compile(r"https?://(?:www\.)?whop\.com/\S+", re.I)
+# Whop campaign pages, also on Whop's Content Rewards site (contentrewards.com/c/campaigns/...)
+WHOP = re.compile(r"https?://(?:www\.)?(?:whop\.com|contentrewards\.com)/[^\s<>)\]]+", re.I)
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/130.0 Safari/537.36")
 WORDS = re.compile(r"\b(views?|per\s*1\s*k|cpm|clips?|campaign|budget|payout|rewards?)\b", re.I)

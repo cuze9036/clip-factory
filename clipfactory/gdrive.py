@@ -11,6 +11,7 @@ public ("anyone with the link") Google Docs can be read.
 """
 import datetime as dt
 import hashlib
+import json
 import os
 import re
 
@@ -24,6 +25,10 @@ API = "https://www.googleapis.com/drive/v3"
 FOLDER = re.compile(r"drive\.google\.com/(?:drive/(?:u/\d+/)?folders/|folderview\?id=|embeddedfolderview\?id=)([\w-]{10,})")
 FILE = re.compile(r"drive\.google\.com/(?:file/(?:u/\d+/)?d/|open\?id=|uc\?(?:export=\w+&)?id=)([\w-]{10,})")
 DOC = re.compile(r"docs\.google\.com/(document|presentation|spreadsheets)/(?:u/\d+/)?d/([\w-]{20,})")
+# Places the bot can't download from: you'd have to fetch these yourself.
+CANT_OPEN = re.compile(r"https?://(?:[\w-]+\.)*(mega\.nz|wetransfer\.com|we\.tl|mediafire\.com|frame\.io|box\.com|"
+                       r"onedrive\.live\.com|1drv\.ms|sharepoint\.com|icloud\.com|notion\.so|notion\.site|"
+                       r"terabox\.com|pcloud\.com|drop\.download|gofile\.io)/\S*", re.I)
 LINK = re.compile(r"https?://[^\s<>\"')\]]+")
 VIDEO_EXT = (".mp4", ".mov", ".mkv", ".webm", ".m4v")
 DOC_TYPES = {"application/vnd.google-apps.document": "text/plain",
@@ -150,6 +155,34 @@ def is_folder(item):
 
 # ---------- exploring one link ----------
 
+def simple_help(url, err=""):
+    """What went wrong with a link and what you can do, in one plain line."""
+    e, u = (err or "").lower(), url.lower()
+    if "drive.google" in u or "docs.google" in u:
+        return ("it's private. Ask the campaign to share it with \"Anyone with the link\", or if your Google "
+                "account can open it, run `clipfactory auth-drive main` once on the laptop.")
+    if "twitch.tv" in u or "youtu" in u or "kick.com" in u:
+        return ("the video doesn't open for me: it may be private, deleted, subscriber/members-only or blocked in "
+                "some countries. Open it in a private browser window; if it doesn't play there, ask for another link.")
+    if "dropbox" in u:
+        return "the Dropbox link isn't public or has expired. Ask the campaign for a new share link."
+    m = CANT_OPEN.search(url)
+    if m:
+        return (f"I can't download from {m.group(1)}. Download the videos yourself, put them in a Google Drive folder "
+                "shared with \"Anyone with the link\", and send that link with 🎬 Footage.")
+    if "login" in e or "401" in e or "403" in e or "permission" in e:
+        return "it needs a login I don't have. Check it opens without logging in, or send another link."
+    return "I couldn't open it. Check it opens without logging in, or send another link."
+
+
+def blocked_text(name, blocked):
+    """The Discord note for links that couldn't be opened: link -> what to do."""
+    out = [f"🔒 **{name}: I couldn't open {len(blocked)} link(s).** What to do:"]
+    out += [f"• <{u[:150]}>: {h}" for u, h in blocked[:8]]
+    out.append("Everything else is used. When it's fixed, send the new link with 🎬 Footage.")
+    return "\n".join(out)
+
+
 def explore(cid, link, max_items=60, max_depth=3, drive=None):
     """Follow a link (and the links inside its guides) to find footage and instructions. Returns a reply."""
     from . import guide
@@ -157,11 +190,16 @@ def explore(cid, link, max_items=60, max_depth=3, drive=None):
     c = campaigns.get(cid)
     queue, seen = [(link.strip().strip("<>"), 0)], set()
     folders, files, texts, other, problems, needs_login = {}, {}, [], [], [], False
+    blocked = []   # (link, what to do): links the bot can't open, explained simply
     count = 0
 
     def take_links(text, depth):
         for u in LINK.findall(text or ""):
             u = u.rstrip(".,;")
+            if CANT_OPEN.search(u):
+                if u not in [b[0] for b in blocked]:
+                    blocked.append((u, simple_help(u)))
+                continue
             if any(rx.search(u) for rx in (FOLDER, FILE, DOC)) or re.search(r"dropbox\.com/|youtube\.com/|youtu\.be/|twitch\.tv/", u):
                 queue.append((u, depth + 1))
 
@@ -219,12 +257,16 @@ def explore(cid, link, max_items=60, max_depth=3, drive=None):
                 try:
                     other.append(campaigns.add_source(cid, url))
                 except ValueError:
-                    pass
+                    if re.search(r"dropbox\.com/|twitch\.tv/\w+/videos?/|/videos/", url):
+                        blocked.append((url, simple_help(url)))
+                    # other links (a channel's page, example posts) aren't footage: skip them quietly
         except NeedsLogin as e:
             needs_login = True
             problems.append(str(e))
+            blocked.append((url, simple_help(url, str(e))))
         except Exception as e:
             problems.append(f"{url[:80]}: {str(e)[:120]}")
+            blocked.append((url, simple_help(url, str(e))))
 
     for fid in folders:
         _add_source(cid, f"folder:{fid}")
@@ -246,8 +288,13 @@ def explore(cid, link, max_items=60, max_depth=3, drive=None):
     out += [f"• {o}" for o in other[:6]]
     if needs_login:
         out.append(LOGIN_HELP)
-    elif problems:
-        out.append("Couldn't open: " + "; ".join(problems[:3]))
+    if blocked:
+        from . import notify
+        notify.send("progress", blocked_text(c["name"], blocked), campaign_id=cid)
+        out.append(f"🔒 {len(blocked)} link(s) I couldn't open: see the note below for what to do.")
+    extra = campaigns._extra(campaigns.get(cid))
+    extra["blocked_links"] = list(dict.fromkeys((extra.get("blocked_links") or []) + [u for u, _ in blocked]))[-20:]
+    db.x("UPDATE campaigns SET notes=? WHERE id=?", json.dumps(extra), cid)
     if not (folders or files or texts or other) and not problems:
         out.append("No videos or guides found behind that link.")
     c = campaigns.get(cid)

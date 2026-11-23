@@ -106,7 +106,7 @@ def parse_source(line):
     m = re.search(r"youtube\.com/(@[\w.-]+)", line) or re.fullmatch(r"(@[\w.-]+)", line)
     if m:
         return "youtube_channel", m.group(1)
-    if re.search(r"(youtube\.com/(watch|live|shorts)|youtu\.be/|twitch\.tv/videos/|kick\.com/.+/videos?/)", line):
+    if re.search(r"(youtube\.com/(watch|live|shorts)|youtu\.be/|twitch\.tv/videos/|clips\.twitch\.tv/|twitch\.tv/\w+/clip/|kick\.com/.+/videos?/)", line):
         return "video", line
     m = re.search(r"twitch\.tv/([A-Za-z0-9_]+)/?$", line)
     if m:

@@ -207,7 +207,8 @@ def apply_brief(cid, text):
     sets["brief"] = text[:20000]
     db.x(f"UPDATE campaigns SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?", *sets.values(), cid)
 
-    added, problems = [], []
+    from .gdrive import CANT_OPEN, simple_help
+    added, problems, blocked = [], [], []
     for line in data.get("sources") or []:
         line = str(line).strip()
         if DRIVE.match(line):
@@ -215,13 +216,20 @@ def apply_brief(cid, text):
         try:
             added.append(campaigns.add_source(cid, line))
         except (ValueError, SystemExit, Exception) as e:
-            problems.append(f"{line[:80]} ({str(e)[:80]})")
+            if line.startswith("http"):
+                blocked.append((line, simple_help(line, str(e))))
+            else:
+                problems.append(f"{line[:80]} ({str(e)[:80]})")
+    for m in CANT_OPEN.finditer(text):   # footage on sites the bot can't download from
+        u = m.group(0).rstrip(").,")
+        if u not in [b[0] for b in blocked]:
+            blocked.append((u, simple_help(u)))
     for link in sorted(set(m.group(0).rstrip(').,') for m in DROPBOX.finditer(text))):
         if not db.one("SELECT 1 FROM sources WHERE campaign_id=? AND channel_id=?", cid, link):
             try:
                 added.append(campaigns.add_source(cid, link))
             except (ValueError, Exception) as e:
-                problems.append(f"{link[:80]} ({str(e)[:80]})")
+                blocked.append((link, simple_help(link, str(e))))
     drive = sorted(set(m.group(0).rstrip(').,') for m in DRIVE.finditer(text)))
     drive_notes = []
     if drive:   # Drive folders/files on the page: explore them (guides inside, videos folders they point to)
@@ -253,6 +261,10 @@ def apply_brief(cid, text):
     out += [n.split("\n", 1)[1] if "\n" in n else n for n in drive_notes]
     if problems:
         out.append("Couldn't use: " + "; ".join(problems[:3]))
+    if blocked:
+        from .gdrive import blocked_text
+        notify.send("progress", blocked_text(c["name"], blocked), campaign_id=cid)
+        out.append(f"🔒 {len(blocked)} link(s) I couldn't open: see the note for what to do.")
     if has_content:
         campaigns.activate(cid)
         out.append("**The lane is running.** Clips will show up here for review.")

@@ -45,6 +45,8 @@ Platforms it pays for: {platforms}
 Rules: {rules}
 Guide (short form): {guide}
 
+Footage links the tool could NOT open (the owner was told): {blocked}
+
 Campaign page and guide documents:
 {text}
 
@@ -108,6 +110,7 @@ def run(c):
     prompt = PROMPT.format(can=CAN, name=c["name"], platforms=", ".join(c.get("platforms") or []) or "?",
                            rules="; ".join(c.get("rules") or []) or "none listed",
                            guide="; ".join(guide.lines(c)) or "none",
+                           blocked=", ".join(campaigns._extra(c).get("blocked_links") or []) or "none",
                            text=_texts(c)[:50000] or "(only the rules and guide above)")
     data, provider = llm.complete_json("campaign_check", prompt, _validate)
     data["digest"] = digest(c)

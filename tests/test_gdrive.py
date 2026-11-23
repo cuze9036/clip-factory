@@ -130,3 +130,45 @@ class DriveTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlockedLinksTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        os.environ["CLIPFACTORY_DATA"] = self.tmp.name
+        from clipfactory import db
+        db._local.__dict__.clear()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_links_it_cant_open_are_explained_simply(self):
+        from clipfactory import campaigns, gdrive, joinflow, llm, notify
+        cid = campaigns.suggest({"name": "CoD Clips", "platforms": ["youtube"], "rate_per_1k": 1}, "pasted")
+        joinflow.joined(cid)
+        d = FakeDrive()
+        d.docs["GUIDEDOC1234567890abcdef"] = ("Guide. Footage: https://mega.nz/folder/abc#key and "
+                                              "https://drive.google.com/drive/folders/PRIVATE1234567890")
+        real = d.children
+
+        def children(fid):
+            if fid == "PRIVATE1234567890":
+                raise gdrive.NeedsLogin("private")
+            return real(fid)
+        d.children = children
+        with mock.patch.object(llm, "complete_json", return_value=GUIDE_AI), \
+                mock.patch.object(notify, "send") as sent:
+            out = gdrive.explore(cid, "https://docs.google.com/document/d/GUIDEDOC1234567890abcdef/edit", drive=d)
+        note = [c.args[1] for c in sent.call_args_list if "couldn't open" in c.args[1]][0]
+        self.assertIn("2 link(s)", note)
+        self.assertIn("I can't download from mega.nz", note)
+        self.assertIn("Anyone with the link", note)
+        self.assertIn("🔒", out)
+        self.assertEqual(len(campaigns._extra(campaigns.get(cid))["blocked_links"]), 2)
+
+    def test_twitch_clips_and_vods_are_footage(self):
+        from clipfactory import campaigns
+        for u in ("https://clips.twitch.tv/FunnyClipSlug", "https://www.twitch.tv/somechannel/clip/FunnySlug-abc",
+                  "https://www.twitch.tv/videos/123456789"):
+            self.assertEqual(campaigns.parse_source(u)[0], "video", u)
+        self.assertEqual(campaigns.parse_source("https://www.twitch.tv/somechannel")[0], "twitch_channel")

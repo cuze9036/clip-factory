@@ -262,18 +262,20 @@ def apply_brief(cid, text, quiet=False):
                 added.append(campaigns.add_source(cid, link))
             except (ValueError, Exception) as e:
                 blocked.append((link, simple_help(link, str(e))))
-    drive = sorted(set(m.group(0).rstrip(').,') for m in DRIVE.finditer(text)))
+    from .guide import DOC
+    drive = sorted(set(m.group(0).rstrip(').,') for m in DRIVE.finditer(text))) + \
+        sorted(set(m.group(0).rstrip(').,') for m in DOC.finditer(text)))
     drive_notes = []
-    if drive:   # Drive folders/files on the page: explore them (guides inside, videos folders they point to)
-        from . import gdrive
-        for link in drive[:3]:
+    if drive:   # Drive folders/files and Google Docs on the page: explore them all the way down
+        from . import gdrive   # (guides inside, the folders, Dropbox, YouTube and Twitch links they point to)
+        for link in drive[:10]:
             try:
                 drive_notes.append(gdrive.explore(cid, link))
             except Exception as e:
                 problems.append(f"{link[:60]} ({str(e)[:80]})")
     try:   # the page's instructions become the campaign guide the AI follows
         from . import guide
-        guide.add(cid, text)
+        guide.add(cid, text, expand_docs=not drive)   # explored docs were already read into the guide
         g = guide.get(campaigns.get(cid))
         added.append(f"Guide saved: {len(g['do'])} things to do, {len(g['avoid'])} to avoid (see `!guide {cid}`)")
     except Exception as e:

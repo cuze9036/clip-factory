@@ -83,12 +83,12 @@ def lines(c):
     return [f"Do: {x}" for x in g["do"]] + [f"Avoid: {x}" for x in g["avoid"]]
 
 
-def add(cid, text):
+def add(cid, text, expand_docs=True):
     """Read instructions into the campaign's guide (merged with what's there). Returns a short reply."""
     c = campaigns.get(cid)
     if not c:
         return f"No campaign `{cid}`."
-    text, problems = expand(text)
+    text, problems = expand(text) if expand_docs else (text, [])
     if problems and len(DOC.sub("", text).strip()) < 40:   # it was only a doc link, and it couldn't be read
         raise RuntimeError(problems[0])
     data, _ = llm.complete_json("campaign_guide", PROMPT.format(text=text[:40000]), _validate)

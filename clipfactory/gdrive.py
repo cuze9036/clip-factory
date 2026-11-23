@@ -183,7 +183,7 @@ def blocked_text(name, blocked):
     return "\n".join(out)
 
 
-def explore(cid, link, max_items=60, max_depth=3, drive=None):
+def explore(cid, link, max_items=150, max_depth=8, drive=None):
     """Follow a link (and the links inside its guides) to find footage and instructions. Returns a reply."""
     from . import guide
     drive = drive or Drive()
@@ -200,7 +200,9 @@ def explore(cid, link, max_items=60, max_depth=3, drive=None):
                 if u not in [b[0] for b in blocked]:
                     blocked.append((u, simple_help(u)))
                 continue
-            if any(rx.search(u) for rx in (FOLDER, FILE, DOC)) or re.search(r"dropbox\.com/|youtube\.com/|youtu\.be/|twitch\.tv/", u):
+            if any(rx.search(u) for rx in (FOLDER, FILE, DOC)) or re.search(
+                    r"dropbox\.com/|youtube\.com/|youtu\.be/|twitch\.tv/|kick\.com/|vimeo\.com/|streamable\.com/|"
+                    r"\.(mp4|mov|m4v|webm|mkv)(\?|$)", u, re.I):
                 queue.append((u, depth + 1))
 
     while queue and count < max_items:
@@ -279,7 +281,7 @@ def explore(cid, link, max_items=60, max_depth=3, drive=None):
                    + ". They download now; new ones are picked up every few hours.")
     if texts:
         try:
-            guide.add(cid, "\n\n".join(texts)[:40000])
+            guide.add(cid, "\n\n".join(texts)[:40000], expand_docs=False)   # every doc was already opened here
             g = guide.get(campaigns.get(cid))
             out.append(f"📋 Guide read from {len(texts)} document(s): {len(g['do'])} things to do, "
                        f"{len(g['avoid'])} to avoid (see `!guide {cid}`).")

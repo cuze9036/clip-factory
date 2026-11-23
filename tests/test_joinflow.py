@@ -67,15 +67,14 @@ class JoinFlowTest(unittest.TestCase):
         self.assertEqual(campaigns.sources(cid)[0]["channel_id"], "@BandOfficial")
         self.assertIsNone(joinflow.awaiting())
 
-    def test_drive_footage_asks_for_a_synced_folder(self):
+    def test_drive_footage_without_login_asks_for_auth_drive(self):
         from clipfactory import campaigns, joinflow
         cid = self._found("Drive Clipping")
         joinflow.joined(cid)
-        page = {"name": "Drive", "sources": ["https://drive.google.com/drive/folders/abc123"]}
+        page = {"name": "Drive", "sources": ["https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp"]}
         with mock.patch.object(campaigns, "extract_from_brief", return_value=(page, "fake")):
-            out = joinflow.apply_brief(cid, "Footage: https://drive.google.com/drive/folders/abc123 " + "x" * 100)
-        self.assertIn("Google Drive", out)
-        self.assertIn("drive.google.com/drive/folders/abc123", out)
+            out = joinflow.apply_brief(cid, "Footage: https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp " + "x" * 100)
+        self.assertIn("clipfactory auth-drive main", out)
         self.assertEqual(campaigns.get(cid)["stage"], "suggested")   # not started without footage
 
     def test_campaign_paste_goes_to_the_joined_campaign(self):
@@ -116,8 +115,8 @@ class JoinFlowTest(unittest.TestCase):
         out = commands.brief(cid, "https://www.twitch.tv/bandlive")
         self.assertIn("is running", out)
         self.assertEqual(campaigns.sources(cid)[0]["channel_id"], "bandlive")
-        out = commands.brief(cid, "https://drive.google.com/drive/folders/abc")
-        self.assertIn("Google Drive for Desktop", out)
+        out = commands.brief(cid, "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp")
+        self.assertIn("clipfactory auth-drive main", out)          # no Drive login yet: one clear step
 
     def test_feed_post_becomes_a_live_suggestion_once(self):
         from clipfactory import campaigns, db, joinflow

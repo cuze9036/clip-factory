@@ -71,7 +71,9 @@ if (-not $py) { throw "Python 3.10+ not found. Restart the PC and run this insta
 Step "2/7 Copying Clip Factory to Desktop\Clipping Tools"
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
 if ((Resolve-Path $Source).Path -ne (Resolve-Path $Target).Path) {
-    robocopy $Source $Target /E /XD .venv data data-demo __pycache__ secrets logs /XF .env *.pyc /NFL /NDL /NJH /NJS /NP | Out-Null
+    # Full paths: a bare "data" would also skip tests\data (the browser test page)
+    $skip = @(".venv", "data", "data-demo", "secrets", "logs") | ForEach-Object { Join-Path $Source $_ }
+    robocopy $Source $Target /E /XD @skip __pycache__ /XF .env *.pyc /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "Copying files failed (robocopy code $LASTEXITCODE)" }
 }
 foreach ($d in @("secrets", "logs", "assets\music", "assets\fonts")) { New-Item -ItemType Directory -Force -Path (Join-Path $Target $d) | Out-Null }

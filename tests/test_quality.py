@@ -115,3 +115,18 @@ class QaTest(unittest.TestCase):
         self.assertEqual(qa.tries(5), 2)                               # then it stops trying
         self.assertEqual(json.loads(db.one("SELECT qa FROM clips WHERE id=7")["qa"])["score"], 3.0)
         self.assertFalse(qa.passed(qa.get(db.one("SELECT * FROM clips WHERE id=7"))))   # never auto-approved
+
+
+class StreamsTest(unittest.TestCase):
+    @unittest.skipUnless(__import__("shutil").which("ffmpeg"), "needs FFmpeg")
+    def test_picture_and_sound_end_together(self):
+        import subprocess
+        from clipfactory import download
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            p = os.path.join(d, "m_raw.mp4")
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=320x240:r=25:d=2",
+                            "-f", "lavfi", "-i", "sine=f=440:d=5", "-c:v", "libx264", "-c:a", "aac", p], check=True)
+            self.assertTrue(download.even_streams(p))
+            n = download.stream_lengths(p)
+            self.assertLess(abs(n["video"] - n["audio"]), 0.3, n)
+            self.assertFalse(download.even_streams(p))                  # already even: left alone

@@ -141,6 +141,7 @@ def stage_render(c, limit=1):
         m = db.one("SELECT * FROM moments WHERE id=?", clip["moment_id"])
         v = db.one("SELECT * FROM videos WHERE id=? AND campaign_id=?", m["video_id"], c["id"])
         try:
+            download.even_streams(clip["raw_path"])   # picture and sound the same length (no frozen ending)
             lang = (v or {}).get("language")
             if not lang:   # never guess English: Hindi speech through the English model gave nonsense captions
                 lang = transcribe.language(clip["raw_path"])

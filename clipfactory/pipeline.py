@@ -117,9 +117,14 @@ def pick_style(c, m, layout, face, clip, captions=True, vertical=False):
     fixed = config.section("render").get("style", "auto")
     if fixed in ("framed", "legacy"):
         return None
+    restyle = db.kv_get(f"restyle:{clip['id']}") is not None   # someone asked for a different look
     db.kv_set(f"restyle:{clip['id']}", None)
     key = f"styles_used:{m['id']}"   # every remake / re-edit of this moment gets a style it hasn't had yet
     used = db.kv_get(key) or []
+    if captions and layout == "facecam_split" and face and not restyle:
+        # webcam footage stays split (other cuts of the moment too): the other styles crop the webcam or the game
+        db.kv_set(key, (used + ["split"])[-5:])
+        return "split"
     if not captions and vertical:   # already 9:16 with its own captions: bold_crop is the whole frame, the boxed
         db.kv_set(key, (used + ["bold_crop"])[-5:])   # styles would crop its top, bottom and captions away
         return "bold_crop"

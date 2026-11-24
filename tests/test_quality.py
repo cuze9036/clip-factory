@@ -130,3 +130,23 @@ class StreamsTest(unittest.TestCase):
             n = download.stream_lengths(p)
             self.assertLess(abs(n["video"] - n["audio"]), 0.3, n)
             self.assertFalse(download.even_streams(p))                  # already even: left alone
+
+
+class SplitStaysTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        os.environ["CLIPFACTORY_DATA"] = self.tmp.name
+        from clipfactory import db
+        db._local.__dict__.clear()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_webcam_footage_stays_split_unless_another_look_is_asked(self):
+        from clipfactory import campaigns, db, pipeline
+        cid = campaigns.suggest({"name": "GTA", "platforms": ["youtube"], "topic": "GTA 6 gameplay"}, "pasted")
+        c, m, cam = campaigns.get(cid), {"id": 2, "category": "fail"}, [0.7, 0.03, 0.25, 0.44]
+        for k in range(3):   # a re-cut of the same moment keeps the split layout
+            self.assertEqual(pipeline.pick_style(c, m, "facecam_split", cam, {"id": k}), "split")
+        db.kv_set("restyle:9", "split")
+        self.assertNotIn(pipeline.pick_style(c, m, "facecam_split", cam, {"id": 9}), ("split", "bold_crop", "word_pop"))

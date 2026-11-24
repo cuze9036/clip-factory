@@ -223,6 +223,10 @@ def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, 
     faces = None
     if on and eff.get("face_tracking", True) and style in ("bold_crop", "word_pop"):
         faces = effects.face_track(base)
+    from .download import stream_lengths
+    ends = stream_lengths(base)   # the clip ends with its shorter stream: never a frozen last frame or silent tail
+    if "video" in ends and "audio" in ends:
+        dur = min(dur, ends["video"], ends["audio"])
     vf = styles.video_filter(style, src, facecam, dur, plan, faces)
     # Our captions, handle and hook go where the picture has no text of its own (subtitles, titles, a game HUD).
     positions = {}

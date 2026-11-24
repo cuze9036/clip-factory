@@ -404,6 +404,21 @@ def mark_posted(post_id, url):
         db.x("UPDATE clips SET status='posted' WHERE id=?", r["id"])
 
 
+def night_post(post):
+    """A campaign clip that would go live while the owner sleeps (late upload, old schedule) moves to the next
+    time they're awake, so the Whop submit window doesn't run out. True when it was moved."""
+    from . import campaigns, schedule
+    c = campaigns.get(post["campaign_id"])
+    live = max(parse_iso(post["scheduled_at"]), utcnow())
+    if not c or not schedule.needs_submit(c) or schedule.awake(live, config.section("submit").get("within_minutes", 30)):
+        return False
+    when = schedule.next_slot(c, post["platform"], post["account"])
+    db.x("UPDATE posts SET scheduled_at=? WHERE id=?", iso(when), post["id"])
+    db.log(post["campaign_id"], f"{NAMES.get(post['platform'], post['platform'])} post {post['id']} moved to "
+           f"{when_text({'scheduled_at': iso(when)})}: you'd be asleep at its time and couldn't submit it")
+    return True
+
+
 def run_due():
     run_manual()
     submit_nudges()
@@ -416,6 +431,8 @@ def run_due():
             key, n = youtube_uploads_today()
             if n >= config.section("schedule").get("youtube_uploads_per_day", 6):
                 continue
+        if night_post(post):
+            continue
         try:
             ext_id, url = UPLOADERS[post["platform"]](post, clip)
             uploaded_early = post["platform"] == "youtube" and parse_iso(post["scheduled_at"]) > utcnow()

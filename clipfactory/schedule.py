@@ -21,6 +21,27 @@ def _campaign_clip_days(campaign_id):
     return days
 
 
+def needs_submit(c):
+    """Campaign clips must be submitted on Whop soon after they go live (own-channel lanes have nothing to submit)."""
+    return not (c.get("origin") == "yaml" and not c.get("url"))
+
+
+def awake(when, minutes=0):
+    """True when `when` and the next `minutes` fall inside the owner's waking hours (submit.awake_hours, in
+    owner_timezone), so a campaign clip never goes live while the owner sleeps and its submit window runs out."""
+    hours = config.section("submit").get("awake_hours")
+    tz = config.get().get("owner_timezone")
+    if not hours or not tz:
+        return True
+    from zoneinfo import ZoneInfo
+    start, end = (dt.time(*map(int, h.split(":"))) for h in hours)
+
+    def inside(t):
+        t = t.astimezone(ZoneInfo(tz)).time()
+        return start <= t <= end if start <= end else (t >= start or t <= end)
+    return inside(when) and inside(when + dt.timedelta(minutes=minutes))
+
+
 def next_slot(c, platform, account, not_before=None):
     cfg = config.section("schedule")
     cap = cfg.get("max_posts_per_account_per_day", 5)
@@ -32,6 +53,11 @@ def next_slot(c, platform, account, not_before=None):
     offset = dt.timedelta(0) if slots else \
         dt.timedelta(minutes=(cfg.get("platform_offset_min") or {}).get(platform, 0))
     slots = slots or cfg.get("slots", ["12:30"])
+    sub = config.section("submit")
+    # the tool posts this one by itself and the owner must submit it within minutes: only while they're awake
+    guard = not manual and needs_submit(c) and sub.get("awake_hours")
+    if guard:
+        slots = list(slots) + [s for s in sub.get("awake_slots", []) if s not in slots]   # extra fall-back times
     from . import insights
     weak = insights.skipped_slots(platform)   # slots the weekly review found clearly weaker
     slots = [s for s in slots if s not in weak] or slots
@@ -50,6 +76,8 @@ def next_slot(c, platform, account, not_before=None):
                 when = dt.datetime.combine(day, dt.time(h, m), tzinfo=ET) + offset + dt.timedelta(
                     seconds=random.uniform(-jitter, jitter) * 60)
                 if when < earliest or len(same_day) >= cap:
+                    continue
+                if guard and not awake(when, sub.get("within_minutes", 30)):
                     continue
                 if any(abs(when - t) < gap for t in taken):
                     continue

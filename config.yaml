@@ -216,6 +216,10 @@ always_manual: []                 # platforms you always post by hand even when 
 submit:                           # Whop submission reminders on Discord (you submit; the tool never touches Whop)
   within_minutes: 30              # campaigns want the link submitted this soon after posting
   second_reminder_minutes: 20     # not marked Submitted by then: one more ping
+  # Clips the tool posts by itself for a campaign go live only when you're awake to submit them (your time,
+  # owner_timezone; ends after midnight are fine). Change it in config.local.yaml if you sleep other hours.
+  awake_hours: ["08:00", "00:30"]
+  awake_slots: ["09:00", "10:30", "13:00", "22:45"]   # extra ET times used when the normal slots fall in your night
 
 graph_api_version: v21.0
 

@@ -121,13 +121,16 @@ def pick_style(c, m, layout, face, clip, captions=True, vertical=False):
     db.kv_set(f"restyle:{clip['id']}", None)
     key = f"styles_used:{m['id']}"   # every remake / re-edit of this moment gets a style it hasn't had yet
     used = db.kv_get(key) or []
-    if captions and layout == "facecam_split" and face and not restyle:
+    if layout == "facecam_split" and face and not restyle:
         # webcam footage stays split (other cuts of the moment too): the other styles crop the webcam or the game
         db.kv_set(key, (used + ["split"])[-5:])
         return "split"
     if not captions and vertical:   # already 9:16 with its own captions: bold_crop is the whole frame, the boxed
         db.kv_set(key, (used + ["bold_crop"])[-5:])   # styles would crop its top, bottom and captions away
         return "bold_crop"
+    if not captions and not restyle:   # wide footage, no captions of ours: the whole frame on a blurred background
+        db.kv_set(key, (used + ["blur_box"])[-5:])
+        return "blur_box"
     if not captions:   # footage with its own captions: show the whole frame so their text isn't cropped off
         avoid = list(used) + ["bold_crop", "word_pop", "split"]
         style = styles.choose(c["topic"], m["category"] or "", avoid=avoid)
@@ -167,7 +170,7 @@ def stage_render(c, limit=1):
             style = pick_style(c, m, layout, face, clip, captions, vertical)
             res = render.render(clip["raw_path"], final, words, m["hook"], layout, face, credit=c["credit"],
                                 style=style, accent=styles.accent_for(c["topic"], m["category"] or ""),
-                                captions=captions, plan=director_plan(m, words))
+                                captions=captions, plan=director_plan(m, words), min_len=c["min_len"] or 0)
             db.x("UPDATE clips SET final_path=?, duration_s=?, words=?, style=?, plan=?, status='rendered' WHERE id=?",
                  res["path"], res["duration"], json.dumps(words), style,
                  json.dumps(res.get("plan"), ensure_ascii=False) if res.get("plan") else None, clip["id"])

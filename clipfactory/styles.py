@@ -209,7 +209,7 @@ def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=No
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     ev = []
-    title = on_screen_title(hook)
+    title = on_screen_title(hook) if captions else ""   # captions off = no text of ours on the video
     if title and "title_y" in look:
         y = look["title_y"]
         if style == "blur_box":

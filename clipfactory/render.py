@@ -160,14 +160,14 @@ def video_filter(layout, facecam, cfg, src):
 
 
 def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=None, accent=None, plan=None,
-           captions=True):
+           captions=True, min_len=0):
     """style: one of styles.STYLE_NAMES (the researched viral looks, with effects from an edit plan);
     without it the older layouts are used. Returns {path, duration, plan}."""
     from . import styles
     cfg = config.section("render")
     raw, out = pathlib.Path(raw), pathlib.Path(out)
     if style in styles.STYLE_NAMES:
-        return _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg, captions)
+        return _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg, captions, min_len)
     src = ffprobe(raw)
     dur = src["duration"]
     ass = out.with_suffix(".ass")
@@ -198,7 +198,7 @@ def render(raw, out, words, hook, layout="blur", facecam=None, credit="", style=
     return {"path": str(out), "duration": dur, "plan": None}
 
 
-def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg, captions=True):
+def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, cfg, captions=True, min_len=0):
     from . import effects, styles
     fonts = styles.ensure_fonts(config.path(cfg.get("fonts_dir", "assets/fonts")))
     src = ffprobe(raw)
@@ -213,6 +213,8 @@ def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, 
         plan.pop("hook", None)
     used = dict(plan)
     base = raw
+    if plan["cuts"] and min_len and sum(e - s for s, e in effects.keep_spans(plan["cuts"], dur)) < min_len:
+        plan["cuts"] = []   # the campaign's minimum length is a rule: no jump cuts that would break it
     if plan["cuts"]:   # jump cuts first, then everything on the new timeline
         spans = effects.keep_spans(plan["cuts"], dur)
         base = out.with_name(out.stem + "_cut.mp4")

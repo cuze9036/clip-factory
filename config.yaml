@@ -28,8 +28,8 @@ download:
 
 whisper:
   model: small.en                 # large-v3 is better but slow without a GPU
-  multilingual_model: medium      # for speech in other languages: heard as-is, written as English captions
-                                  # (small mistranslated Hindi gameplay talk into nonsense)
+  multilingual_model: small       # for speech in other languages: heard as-is, written as English captions
+                                  # (medium is better but its 1.5 GB download kept stalling on the laptop)
   device: auto
   compute_type: int8
 

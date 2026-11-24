@@ -42,7 +42,7 @@ What it CANNOT do:
   Post titles, descriptions and hashtags CAN be written in the campaign's language (e.g. Arabic).
 - Post more than about 10 YouTube uploads a day."""
 
-PROMPT = """You are checking a clipping campaign before an automated clipping tool starts working on it.
+PROMPT = """You are checking a clipping campaign before an automated clipping tool starts working on it (check v2).
 Read EVERYTHING below (the campaign page, the guide documents and the rules) and decide if the tool can make clips
 that follow this campaign. Translate anything not in English in your head; answer in plain English only.
 
@@ -116,6 +116,7 @@ def _validate(d):
     # on the same page), so any blocker makes it "no", with the reason listed.
     needs = d.get("needs") if isinstance(d.get("needs"), dict) else {}
     hits = [why for key, why in BLOCKERS.items() if needs.get(key) is True]
+    out["needs"] = {k: needs.get(k) is True for k in BLOCKERS}   # kept, so a cached answer is judged the same way
     out["blockers"] = [key for key in BLOCKERS if needs.get(key) is True]
     if hits:
         out["verdict"] = "no"

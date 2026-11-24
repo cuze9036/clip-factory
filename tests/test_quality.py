@@ -150,3 +150,38 @@ class SplitStaysTest(unittest.TestCase):
             self.assertEqual(pipeline.pick_style(c, m, "facecam_split", cam, {"id": k}), "split")
         db.kv_set("restyle:9", "split")
         self.assertNotIn(pipeline.pick_style(c, m, "facecam_split", cam, {"id": 9}), ("split", "bold_crop", "word_pop"))
+
+
+class CampaignLanguageTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        os.environ["CLIPFACTORY_DATA"] = self.tmp.name
+        from clipfactory import db
+        db._local.__dict__.clear()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_arabic_campaign_gets_arabic_titles_and_newest_guide_first(self):
+        from clipfactory import campaigns, guide, llm, metadata
+        cid = campaigns.suggest({"name": "CoD MW4", "platforms": ["instagram"], "rate_per_1k": 1}, "pasted")
+        old = {"do": [f"old rule {i}" for i in range(15)], "avoid": [], "hashtags": [], "credit": "",
+               "clip_length": None, "post_language": ""}
+        new = dict(old, do=["Use split screen for the podcast"], post_language="arabic")
+        with mock.patch.object(llm, "complete_json", side_effect=[(old, "x"), (guide._validate(new), "x")]):
+            guide.add(cid, "old brief", expand_docs=False)
+            guide.add(cid, "الكابشن يجب أن يكون باللغة العربية", expand_docs=False)
+        c = campaigns.get(cid)
+        self.assertEqual(guide.get(c)["do"][0], "Use split screen for the podcast")   # newest first, not cut off
+        self.assertEqual(metadata.post_language(c), "Arabic")
+        arabic = {"titles": ["لحظة جنونية في كود"], "description": "شاهد النهاية", "hashtags": ["#كود", "#MW4"]}
+        seen = {}
+
+        def fake(task, prompt, validate):
+            seen["prompt"] = prompt
+            return validate(arabic), "x"
+        with mock.patch.object(llm, "complete_json", side_effect=fake):
+            meta = metadata.write("", {"category": "funny", "hook": "h", "why": "w"}, c)
+        self.assertIn("native Arabic", seen["prompt"])
+        self.assertEqual(meta["titles"][0], "لحظة جنونية في كود")
+        self.assertIn("#كود", meta["hashtags"])

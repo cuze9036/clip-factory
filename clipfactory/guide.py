@@ -21,7 +21,9 @@ Return JSON only:
   "avoid": ["up to 8 lines, max 15 words each: what is not allowed"],
   "hashtags": ["#tag"] (only tags the text says every post must have),
   "credit": "credit line or @tag the text says every post must have, or empty",
-  "clip_length": [min_seconds, max_seconds] or null}}
+  "clip_length": [min_seconds, max_seconds] or null,
+  "post_language": "the language the text says post captions / titles must be written in (e.g. Arabic, Spanish),
+                    or empty when it doesn't say or says English"}}
 
 Text:
 {text}
@@ -65,7 +67,10 @@ def _validate(d):
     out = {"do": [str(x).strip()[:120] for x in d.get("do") or [] if str(x).strip()][:12],
            "avoid": [str(x).strip()[:120] for x in d.get("avoid") or [] if str(x).strip()][:8],
            "hashtags": [("#" + str(h).lstrip("#")).strip() for h in d.get("hashtags") or [] if str(h).strip("# ")][:6],
-           "credit": str(d.get("credit") or "").strip()[:120], "clip_length": d.get("clip_length")}
+           "credit": str(d.get("credit") or "").strip()[:120], "clip_length": d.get("clip_length"),
+           "post_language": re.sub(r"[^A-Za-z ]", "", str(d.get("post_language") or "")).strip().title()[:20]}
+    if out["post_language"] in ("English", "American English", "None", "Empty"):
+        out["post_language"] = ""
     if not out["do"] and not out["avoid"]:
         raise llm.Invalid("no instructions found")
     llm.require_english(" ".join(out["do"] + out["avoid"]))
@@ -94,9 +99,11 @@ def add(cid, text, expand_docs=True):
     data, _ = llm.complete_json("campaign_guide", PROMPT.format(text=text[:40000]), _validate)
     extra = campaigns._extra(c)
     g = get(c)
-    for k, cap in (("do", 15), ("avoid", 10)):
-        g[k] = list(dict.fromkeys(g[k] + data[k]))[:cap]
+    for k, cap in (("do", 15), ("avoid", 10)):   # the newest instructions first: they replace stale ones
+        g[k] = list(dict.fromkeys(data[k] + g[k]))[:cap]
     extra["guide"] = g
+    if data.get("post_language"):   # e.g. an Arabic campaign: titles and descriptions are written in Arabic
+        extra["post_language"] = data["post_language"]
     old = extra.get("guide_text") or ""
     if text.strip() and text.strip()[:2000] not in old:   # the full text, for the campaign check
         extra["guide_text"] = (old + "\n\n" + text.strip())[-60000:].strip()

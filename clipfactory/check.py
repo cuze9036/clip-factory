@@ -18,7 +18,7 @@ from . import campaigns, db, llm, notify
 VERDICTS = {"go": "✅ We can do this", "partial": "🟡 We can do part of it", "no": "⛔ Not a fit for this tool"}
 BLOCKERS = {"filming_or_voiceover": "Film new footage, show a face on camera or record a voice-over",
             "shot_by_shot_edit": "Do a shot-by-shot edit (replace given shots with provided files)",
-            "non_english_text": "Write captions, titles or hooks in a language other than English"}
+            "non_english_text": "Burn captions or hook text on the video in a language other than English"}
 MAX_TRIES = 3   # if the AI can't answer this many times, the lane goes on (with a warning) instead of waiting forever
 
 CAN = """What this clipping tool CAN do by itself:
@@ -37,8 +37,8 @@ What it CANNOT do:
   these by hand).
 - Follow a shot-by-shot editing job: replace given shots with provided substitute files, re-edit a video to an
   exact edit list, or keep a full video as it is apart from listed changes.
-- Write captions, titles or hooks in a language other than English (a campaign for an Arabic, Spanish, ... audience
-  that wants on-screen text in that language).
+- Burn on-screen captions or hook text in a language other than English (it can leave its own captions out).
+  Post titles, descriptions and hashtags CAN be written in the campaign's language (e.g. Arabic).
 - Post more than about 10 YouTube uploads a day."""
 
 PROMPT = """You are checking a clipping campaign before an automated clipping tool starts working on it.
@@ -62,8 +62,8 @@ Return JSON only:
                                      recorded gameplay of our own),
             "shot_by_shot_edit": true/false (the job is to replace given shots with provided files, or re-edit
                                   videos to an exact edit list, instead of cutting the best moments),
-            "non_english_text": true/false (captions, titles or hooks must be written in a language other than
-                                 English; required hashtags or tags in another language do NOT count)}},
+            "non_english_text": true/false (text burned ON the video must be in a language other than English;
+                                 the post's caption / title / hashtags in another language do NOT count)}},
   "verdict": "go" (the tool can make clips that follow the rules) | "partial" (some parts need the owner or some
              clips/platforms can't be done, but clips can be made) | "no" (the campaign's main deliverable needs
              things the tool can't do, like filming, voice-over, a shot-by-shot substitution edit, or captions in

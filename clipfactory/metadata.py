@@ -1,19 +1,27 @@
-"""Stage 5: English titles, description and hashtags, with each campaign's required credit and tags."""
+"""Stage 5: titles, description and hashtags (English, or the language the campaign asks for), with each
+campaign's required credit and tags."""
 import json
 import re
 
 from . import config, llm
 
 
-def _validate(data):
+def _validate(data, english=True):
     titles = [str(t).strip().strip('"')[:90] for t in data.get("titles", []) if str(t).strip()][:3]
     if not titles:
         raise llm.Invalid("no titles")
     desc = str(data.get("description", "")).strip()[:600]
-    tags = [("#" + re.sub(r"[^A-Za-z0-9_]", "", str(h).lstrip("#")))
-            for h in data.get("hashtags", []) if re.sub(r"[^A-Za-z0-9_]", "", str(h))][:5]
-    llm.require_english(*titles, desc)
+    tag = (lambda h: re.sub(r"[^A-Za-z0-9_]", "", h)) if english else (lambda h: re.sub(r"[^\w]", "", h))
+    tags = [("#" + tag(str(h).lstrip("#"))) for h in data.get("hashtags", []) if tag(str(h))][:5]
+    if english:
+        llm.require_english(*titles, desc)
     return {"titles": titles, "description": desc, "hashtags": tags}
+
+
+def post_language(campaign):
+    """The language this campaign's post captions must be in ("English" unless its guide says otherwise)."""
+    from . import campaigns
+    return campaigns._extra(campaign).get("post_language") or "English"
 
 
 def write(clip_text, moment, campaign, hint=""):
@@ -23,8 +31,14 @@ def write(clip_text, moment, campaign, hint=""):
     prompt = llm.METADATA_PROMPT.format(category=moment["category"], hook=moment["hook"], why=moment["why"],
                                         transcript=(clip_text or "(no speech)")[:1200], topic=campaign["topic"],
                                         audience=campaign["audience"], rules=rules)
+    lang = post_language(campaign)
+    validate = _validate
+    if lang != "English":   # e.g. an Arabic campaign: "the caption must be in Arabic"
+        prompt = prompt.replace("American English only.", f"Write the titles, description and hashtags in natural, "
+                                f"native {lang}: the campaign requires {lang} captions.")
+        validate = lambda d: _validate(d, english=False)   # noqa: E731
     try:
-        meta, _ = llm.complete_json("metadata", prompt, _validate)
+        meta, _ = llm.complete_json("metadata", prompt, validate)
     except llm.LLMError:
         hook = (moment["hook"] or "You won't believe this").strip().rstrip(".")
         meta = {"titles": [hook, f"{hook} (wait for it)", f"Nobody expected this: {hook.lower()}"],

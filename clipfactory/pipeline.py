@@ -98,6 +98,19 @@ def want_captions(c, v, raw_path):
     return not known
 
 
+def find_facecam(c, v, raw_path):
+    """The webcam box of this video (found once per video, then remembered), or None."""
+    key = f"facecam:{c['id']}:{v['id'] if v else raw_path}"
+    known = db.kv_get(key)
+    if known is None:
+        from . import effects
+        known = effects.find_facecam(raw_path) or []
+        db.kv_set(key, known)
+        if known:
+            db.log(c["id"], f"{(v or {}).get('title', 'This video')}: webcam found, clips use the split layout")
+    return known or None
+
+
 def pick_style(c, m, layout, face, clip, captions=True, vertical=False):
     """The edit style: a campaign's fixed choice, else one that fits the content (varied for the weekly review).
     'framed' / 'blur' set in config.yaml keep the older looks."""
@@ -128,10 +141,19 @@ def stage_render(c, limit=1):
         m = db.one("SELECT * FROM moments WHERE id=?", clip["moment_id"])
         v = db.one("SELECT * FROM videos WHERE id=? AND campaign_id=?", m["video_id"], c["id"])
         try:
-            words = transcribe.words(clip["raw_path"], translate=((v or {}).get("language") or "en") != "en")
+            lang = (v or {}).get("language")
+            if not lang:   # never guess English: Hindi speech through the English model gave nonsense captions
+                lang = transcribe.language(clip["raw_path"])
+                if v:
+                    db.x("UPDATE videos SET language=? WHERE id=? AND campaign_id=?", lang, v["id"], c["id"])
+            words = transcribe.words(clip["raw_path"], translate=lang != "en")
             layout, face = _source_layout(v)
+            if not face:   # a streamer's webcam in the footage: webcam on top, game below (never zoom into it)
+                face = find_facecam(c, v, clip["raw_path"])
+                if face:
+                    layout = "facecam_split"
             final = clip["raw_path"].replace("_raw.mp4", "_final.mp4")
-            captions = want_captions(c, v, clip["raw_path"])
+            captions = want_captions(c, v, clip["raw_path"]) and not db.kv_get(f"captions_off:{m['id']}")
             vertical = False
             if not captions:
                 src = render.ffprobe(clip["raw_path"])
@@ -146,6 +168,29 @@ def stage_render(c, limit=1):
         except Exception as e:
             db.x("UPDATE clips SET status='failed', error=? WHERE id=?", str(e)[:500], clip["id"])
             db.log(c["id"], f"Render failed for clip {clip['id']}: {e}", "error")
+            continue
+        check_clip(c, {**clip, "style": style}, res, captions)
+
+
+def check_clip(c, clip, res, captions):
+    """The AI watches the finished clip; a clip that fails is fixed by itself (another cut, style or no captions)."""
+    from . import qa
+    if not config.section("qa").get("enabled", True):
+        return
+    try:
+        r = qa.check(res["path"], res["duration"], c, clip["style"], captions, res.get("plan"), c["credit"])
+    except Exception as e:   # the check is a safety net: an AI outage never stops clips
+        db.log(c["id"], f"AI check of clip {clip['id']} skipped: {str(e)[:150]}", "warn")
+        return
+    qa.store(clip["id"], r)
+    if qa.passed(r):
+        return
+    problems = ", ".join(sorted({i["type"].replace("_", " ") for i in r["issues"]})) or "weak"
+    done = qa.fix(clip, r)
+    if done:
+        db.log(c["id"], f"Clip {clip['id']} AI check {r['score']:.0f}/10 ({problems}): {done}")
+    else:
+        db.log(c["id"], f"Clip {clip['id']} AI check {r['score']:.0f}/10 ({problems}): goes to review as it is", "warn")
 
 
 def stage_metadata(c, limit=3):
@@ -157,7 +202,8 @@ def stage_metadata(c, limit=3):
         titles, title, desc, tags = metadata.store_fields(meta)
         db.x("UPDATE clips SET titles=?, title=?, description=?, hashtags=?, status='pending_review' WHERE id=?",
              titles, title, desc, tags, clip["id"])
-        if m["score"] >= campaigns.auto_approve_threshold(c):
+        from . import qa
+        if m["score"] >= campaigns.auto_approve_threshold(c) and qa.passed(qa.get(clip)):
             review.auto_approve(clip["id"])
         else:
             db.log(c["id"], f"Clip {clip['id']} ready for review: {title}")

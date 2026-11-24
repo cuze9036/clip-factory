@@ -28,7 +28,8 @@ download:
 
 whisper:
   model: small.en                 # large-v3 is better but slow without a GPU
-  multilingual_model: small       # for speech in other languages: heard as-is, written as English captions
+  multilingual_model: medium      # for speech in other languages: heard as-is, written as English captions
+                                  # (small mistranslated Hindi gameplay talk into nonsense)
   device: auto
   compute_type: int8
 
@@ -136,6 +137,11 @@ flops:                            # clips with few views (clipfactory/flops.py)
   views_below: 300                # fewer views than this (or the campaign's minimum to get paid) = a flop
   remake: true                    # make a new version of the moment (new style + titles), unless the campaign
                                   # forbids reposts; each flop also allows one more fresh clip a day
+
+qa:                               # the AI watches every finished clip before anyone sees it (clipfactory/qa.py)
+  enabled: true
+  min_score: 7                    # below this, or any serious problem, the clip is fixed by itself
+  max_fixes: 2                    # then it goes to review with the problems listed (never auto-approved)
 
 review:
   auto_approve_score: 9           # clips the AI scores this high post by themselves; 11 = review everything

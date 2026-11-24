@@ -203,6 +203,64 @@ def _yunet():
     return p if p.exists() else None
 
 
+def find_facecam(path, samples=12):
+    """A streamer's webcam in the footage: (x, y, w, h) as 0..1 of the frame, else None.
+    It is a small face off to one side that stays in the same place in most frames (faces in the game move
+    around). The box is the steady frame drawn around the webcam when there is one, else a box around the face."""
+    try:
+        import cv2
+        import numpy as np
+        model = _yunet()
+        if not model or not hasattr(cv2, "FaceDetectorYN"):
+            return None
+        cap = cv2.VideoCapture(str(path))
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        det, hits, acc, n = None, [], None, 0
+        for k in range(samples):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (k + 0.5) / samples))
+            ok, f = cap.read()
+            if not ok:
+                continue
+            f = cv2.resize(f, (960, int(f.shape[0] * 960 / f.shape[1])))
+            h, w = f.shape[:2]
+            if h >= w:   # tall footage has no webcam box to split off
+                cap.release()
+                return None
+            n += 1
+            if det is None:
+                det = cv2.FaceDetectorYN.create(str(model), "", (w, h), 0.7)
+            _, faces = det.detect(f)
+            e = cv2.Canny(cv2.cvtColor(f, cv2.COLOR_BGR2GRAY), 60, 160) > 0
+            acc = e.astype(np.float32) if acc is None else acc + e
+            for x, y, fw, fh in ([fc[:4] for fc in faces] if faces is not None else []):
+                cx, cy = (x + fw / 2) / w, (y + fh / 2) / h
+                if fw / w < 0.2 and (cx < 0.33 or cx > 0.67):
+                    hits.append((cx, cy, fw / w, fh / h))
+        cap.release()
+        groups = [[q for q in hits if abs(q[0] - p[0]) < 0.04 and abs(q[1] - p[1]) < 0.04] for p in hits]
+        best = max(groups, key=len) if groups else []
+        if n == 0 or len(best) < n * 0.6:
+            return None
+        cx, cy, fw, fh = (float(v) for v in np.median(np.array(best), axis=0))
+        H, W = acc.shape
+        steady = cv2.dilate(((acc / n) > 0.7).astype(np.uint8) * 255, np.ones((3, 3), np.uint8))
+        cnts, _ = cv2.findContours(steady, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        px, py = cx * W, cy * H
+        boxes = []
+        for c in cnts:
+            x, y, bw, bh = cv2.boundingRect(c)
+            if x < px < x + bw and y < py < y + bh and bw > fw * W * 1.5 and bh > fh * H * 1.3                     and bw * bh < W * H * 0.3:
+                boxes.append((bw * bh, x, y, bw, bh))
+        if boxes:
+            _, x, y, bw, bh = min(boxes)
+        else:
+            x, y = max(0.0, px - 1.6 * fw * W), max(0.0, py - 1.2 * fh * H)
+            bw, bh = min(W, px + 1.6 * fw * W) - x, min(H, py + 1.2 * fh * H) - y
+        return [round(x / W, 3), round(y / H, 3), round(bw / W, 3), round(bh / H, 3)]
+    except Exception:
+        return None
+
+
 def face_track(path, every=0.5):
     """[(t, x as 0..1)] where the biggest face is, smoothed; None if there are no steady faces or no OpenCV."""
     try:

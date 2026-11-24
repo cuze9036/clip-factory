@@ -223,10 +223,22 @@ def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, 
     faces = None
     if on and eff.get("face_tracking", True) and style in ("bold_crop", "word_pop"):
         faces = effects.face_track(base)
-    ass = out.with_suffix(".ass")
-    ass.write_text(styles.build_ass(style, words, hook, dur, credit, accent or "#FFD400", plan, captions),
-                   encoding="utf-8")
     vf = styles.video_filter(style, src, facecam, dur, plan, faces)
+    # Our captions, handle and hook go where the picture has no text of its own (subtitles, titles, a game HUD).
+    positions = {}
+    if cfg.get("avoid_onscreen_text", True):
+        from . import layout
+        try:
+            frames = layout.sample_frames(base, vf, dur)
+            if frames:
+                positions = layout.place(styles.LOOK[style], layout.text_rows(frames), captions=captions,
+                                         hook=bool(plan.get("hook")))
+        except Exception as e:   # never stop a render over this: the style's usual spots are used
+            positions = {"error": str(e)[:120]}
+    used["layout"] = positions
+    ass = out.with_suffix(".ass")
+    ass.write_text(styles.build_ass(style, words, hook, dur, credit, accent or "#FFD400", plan, captions,
+                                    positions=positions), encoding="utf-8")
 
     inputs, n, chain = ["-i", str(base)], 1, "[v0]"
     for k, e in enumerate(plan.get("emojis", [])):
@@ -234,7 +246,7 @@ def _render_styled(raw, out, words, hook, style, facecam, credit, accent, plan, 
         if not png:
             continue
         inputs += ["-loop", "1", "-i", str(png)]
-        y = styles.LOOK[style]["cap_y"] - 240
+        y = positions.get("cap_y", styles.LOOK[style]["cap_y"]) - 240
         vf += (f";[{n}:v]scale=150:150,format=rgba[e{k}];{chain}[e{k}]overlay=x=465:y={y}:shortest=1:"
                f"enable='between(t,{e['t']:.2f},{e['t'] + e['dur']:.2f})'[ve{k}]")
         chain, n = f"[ve{k}]", n + 1

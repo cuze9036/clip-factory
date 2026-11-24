@@ -103,7 +103,8 @@ def _gemini(p, prompt, video):
     parts.append(types.Part(text=prompt))
     cfg = types.GenerateContentConfig(
         response_mime_type="application/json", temperature=0.4,
-        media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW if video else None,
+        media_resolution=(None if not video else types.MediaResolution.MEDIA_RESOLUTION_MEDIUM if video.get("detail")
+                          else types.MediaResolution.MEDIA_RESOLUTION_LOW),   # "detail": small text must be readable
     )
     r = client.models.generate_content(model=p["model"], contents=types.Content(role="user", parts=parts), config=cfg)
     return r.text
@@ -113,7 +114,7 @@ def upload_video(client, path):
     """Upload a local video to Gemini once (kept ~2 days by Google) and wait until it can be watched."""
     import os
     st = os.stat(path)
-    key = f"gemini_file:{path}:{st.st_size}"
+    key = f"gemini_file:{path}:{st.st_size}:{st.st_mtime_ns}"
     known = db.kv_get(key)
     if known and utcnow().timestamp() - known["at"] < 40 * 3600:
         return known

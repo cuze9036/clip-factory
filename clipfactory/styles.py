@@ -93,9 +93,12 @@ def choose(topic, category="", facecam=False, avoid=None, rng=random):
     fixed = (config.section("render").get("style") or "auto")
     if fixed != "auto" and fixed in STYLE_NAMES and fixed not in avoid:
         return fixed
+    if facecam:   # the face-following crops would zoom into the webcam and lose the game
+        options = {k: v for k, v in options.items() if k not in ("bold_crop", "word_pop")} or {"blur_box": 1}
     options = {k: v for k, v in options.items() if k not in avoid}
     if not options:   # every fitting style was tried: any other style, then start over
-        options = {k: 1 for k in STYLE_NAMES if k != "split" and k not in avoid} or {"bold_crop": 1}
+        options = {k: 1 for k in STYLE_NAMES if k != "split" and k not in avoid
+                   and not (facecam and k in ("bold_crop", "word_pop"))} or {"blur_box": 1}
     names, weights = zip(*options.items())
     return rng.choices(names, weights)[0]
 
@@ -132,14 +135,26 @@ def _t(sec):
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
+WEAK = {"a", "an", "the", "to", "of", "and", "or", "but", "i", "my", "your", "his", "her", "is", "are", "was", "in",
+        "on", "at", "for", "with", "so", "if", "that", "this", "we", "you", "he", "she", "they", "it's", "i'm"}
+
+
 def _groups(words, size):
+    """Caption lines of up to `size` words that read naturally: a line ends at a sentence end, a comma or a pause,
+    and never on a small word like "I" or "the" (that word starts the next line instead)."""
     groups, cur = [], []
     for w in words:
-        if cur and (len(cur) >= size or w["s"] - cur[-1]["e"] > 0.6):
+        if cur and w["s"] - cur[-1]["e"] > 0.6:
             groups.append(cur)
             cur = []
+        elif cur and len(cur) >= size:
+            carry = []
+            if len(cur) > 1 and re.sub(r"[^\w']", "", cur[-1]["w"]).lower() in WEAK:
+                carry = [cur.pop()]
+            groups.append(cur)
+            cur = carry
         cur.append(w)
-        if re.search(r"[.!?]$", w["w"]):
+        if re.search(r"[.!?,]$", w["w"]):
             groups.append(cur)
             cur = []
     return groups + ([cur] if cur else [])
@@ -152,19 +167,21 @@ LOOK = {
                     "credit_y": 1390},
     "word_pop":    {"cap_y": 1060, "per": 1, "font": "Anton", "size": 150, "outline": 10, "pop": 70,
                     "credit_y": 1390},
-    "blur_box":    {"cap_y": 1420, "per": 1, "font": "Montserrat Black", "size": 86, "outline": 8, "pop": 75,
+    "blur_box":    {"cap_y": 1420, "per": 2, "font": "Montserrat Black", "size": 82, "outline": 8, "pop": 80,
                     "title_y": 300, "credit_y": 560},
     "black_title": {"cap_y": 1300, "per": 3, "font": "Montserrat Black", "size": 72, "outline": 7, "pop": 85,
                     "title_y": 290, "credit_y": 1440},
     "meme_top":    {"cap_y": 1300, "per": 3, "font": "Montserrat Black", "size": 72, "outline": 7, "pop": 85,
                     "title_y": 262, "credit_y": 1395},
-    "split":       {"cap_y": 960, "per": 1, "font": "Montserrat Black", "size": 84, "outline": 8, "pop": 75,
+    "split":       {"cap_y": 960, "per": 3, "font": "Montserrat Black", "size": 78, "outline": 9, "pop": 80,
                     "credit_y": 1390},
 }
 
 
-def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=None, captions=True):
+def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=None, captions=True, positions=None):
+    """positions: {"cap_y", "credit_y", "hook_y"} from layout.place (free of text already in the picture)."""
     plan = plan or {}
+    pos = positions or {}
     if not captions:   # the footage already has its own captions: don't add ours on top
         words = []
     emphasis = set(plan.get("emphasis") or [])
@@ -206,15 +223,16 @@ def build_ass(style, words, hook, duration, credit="", accent="#FFD400", plan=No
         txt = on_screen_title(hook_p["text"], 40).upper()
         if txt:
             ev.append(f"Dialogue: 3,{_t(0)},{_t(min(duration, hook_p.get('until', 1.8)))},Hook,,0,0,0,,"
-                      f"{{\\an5\\pos(540,330)\\fscx70\\fscy70\\t(0,120,\\fscx106\\fscy106)\\t(120,200,\\fscx100\\fscy100)}}{txt}")
+                      f"{{\\an5\\pos(540,{pos.get('hook_y', 330)})\\fscx70\\fscy70\\t(0,120,\\fscx106\\fscy106)\\t(120,200,\\fscx100\\fscy100)}}{txt}")
     handle = short_credit(credit)
     if handle:
         cy = look["credit_y"]
         if not captions and style in ("bold_crop", "word_pop", "split"):
             cy = 200   # the footage's own captions sit in the lower third: keep the handle clear of them
+        cy = pos.get("credit_y", cy)
         colour = acc if style in ("bold_crop", "word_pop", "split") else "&H00FFFFFF&"
         ev.append(f"Dialogue: 1,{_t(0)},{_t(duration)},Credit,,0,0,0,,{{\\an5\\pos(540,{cy})\\c{colour}}}{handle}")
-    y, pop = look["cap_y"], look["pop"]
+    y, pop = pos.get("cap_y", look["cap_y"]), look["pop"]
     index = {id(w): i for i, w in enumerate(words)}
     groups = _groups(words, look["per"])
     for gi, g in enumerate(groups):
@@ -270,7 +288,11 @@ def video_filter(style, src, facecam=None, duration=10.0, plan=None, faces=None)
                 f"[bg][fg]overlay=0:520:shortest=1,setsar=1{flash}[v0]")
     if style == "split" and facecam:
         fx, fy, fw, fh = facecam
+        # the game half is cut beside the webcam, so the webcam doesn't show a second time down there
+        gx = (f"min((iw-ow)/2,max(0,{fx}*iw-ow))" if fx + fw / 2 > 0.5 else
+              f"max((iw-ow)/2,min(iw-ow,{fx + fw}*iw))")
         return (f"[0:v]split[a][b];[a]crop=iw*{fw}:ih*{fh}:iw*{fx}:ih*{fy},scale={W}:960:force_original_aspect_ratio="
-                f"increase,crop={W}:960,setsar=1,{grade}[face];[b]scale={W}:960:force_original_aspect_ratio=increase,crop={W}:960,setsar=1,{grade},"
+                f"increase,crop={W}:960,setsar=1,{grade}[face];[b]scale={W}:960:force_original_aspect_ratio=increase,"
+                f"crop={W}:960:x='{gx}':y=0,setsar=1,{grade},"
                 f"{effects.motion(W, 960, plan, d)}[game];[face][game]vstack,setsar=1{flash}[v0]")
     return video_filter("bold_crop", src, None, duration, plan, faces)

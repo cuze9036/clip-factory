@@ -50,11 +50,16 @@ def _clip(clip_id):
                      JOIN moments m ON m.id=c.moment_id JOIN campaigns k ON k.id=c.campaign_id WHERE c.id=?""", clip_id)
 
 
+def _qa(clip):
+    from . import qa
+    return qa.text(qa.get(clip))
+
+
 def notify(clip_id):
     clip = _clip(clip_id)
     titles = json.loads(clip["titles"] or "[]")
     outbox.send("review", f"Clip #{clip_id} ready · {clip['campaign']} · {clip['score']:.0f}/10 {clip['category']}"
-                + _style(clip) + "\n"
+                + _style(clip) + _qa(clip) + "\n"
                 + "\n".join(f"{i + 1}. {t}" for i, t in enumerate(titles))
                 + f"\nType `!approve {clip_id} 2` to pick title 2, or tap a button.",
                 campaign_id=clip["campaign_id"], clip_id=clip_id, file_path=clip["final_path"],
@@ -67,7 +72,7 @@ def auto_approve(clip_id):
     when = approve(clip_id, 0)
     if when:
         outbox.send("auto", f"✅ Auto-approved clip #{clip_id} ({clip['score']:.0f}/10) · {clip['campaign']}{_style(clip)}\n"
-                    f"{clip['title']}\n{plan_text(clip_id)}\nTap Cancel to stop it, or Re-edit to change it.",
+                    f"{clip['title']}{_qa(clip)}\n{plan_text(clip_id)}\nTap Cancel to stop it, or Re-edit to change it.",
                     campaign_id=clip["campaign_id"], clip_id=clip_id, file_path=clip["final_path"],
                     buttons=[["🔁 Re-edit", f"re:{clip_id}", "grey"], ["Cancel", f"x:{clip_id}", "red"]])
     return when

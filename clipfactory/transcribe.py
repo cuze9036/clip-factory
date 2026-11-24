@@ -1,6 +1,12 @@
 """Local speech-to-text with faster-whisper (no API cost).
 Uses the GPU when it works; if the GPU libraries are missing it switches to the CPU and remembers that."""
+import os
+
 from . import config, db
+
+# The speech models download once from Hugging Face. Its newer "xet" downloader stalled at 0 bytes on the laptop
+# (the 1.5 GB medium model never arrived), the plain download works.
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 _model = None
 
@@ -85,6 +91,14 @@ def _run(fn):
 def _opts(translate):
     # English speech: the fast English model. Other languages: translated into English captions.
     return {"task": "translate"} if translate else {"language": "en"}
+
+
+def language(path):
+    """The spoken language ("en", "hi", ...): the multilingual model listens to the first 30 s. "en" when unsure."""
+    def go(model):
+        _, info = _get_multi().transcribe(str(path), vad_filter=True)
+        return info.language if info.language and info.language_probability >= 0.5 else "en"
+    return _run(go)
 
 
 def segments(path, translate=False):

@@ -91,6 +91,20 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(check._validate(dict(base, needs={"shot_by_shot_edit": False}))["verdict"], "go")
         self.assertEqual(check._validate(base)["verdict"], "go")   # older answers without "needs" still work
 
+    def test_no_added_text_meets_a_language_rule(self):
+        import json
+        from unittest import mock
+        from clipfactory import campaigns, check, db, llm
+        cid = campaigns.suggest({"name": "CoD Arabic", "platforms": ["instagram"], "rate_per_1k": 1}, "pasted")
+        db.x("UPDATE campaigns SET brief='Captions must be in Arabic' WHERE id=?", cid)
+        ans = {"verdict": "go", "summary": "Arabic clips.", "can": ["cut"], "cannot": [], "account_rules": [],
+               "owner_todo": [], "needs": {"non_english_text": True}}
+        with mock.patch.object(llm, "complete_json", side_effect=lambda t, p, v: (v(dict(ans)), "x")):
+            self.assertEqual(check.run(campaigns.get(cid))["verdict"], "no")
+            extra = campaigns._extra(campaigns.get(cid)); extra["captions"] = "off"
+            db.x("UPDATE campaigns SET notes=?, paused=0 WHERE id=?", json.dumps(extra), cid)
+            self.assertEqual(check.run(campaigns.get(cid))["verdict"], "partial")
+
     def test_own_lanes_need_no_check(self):
         from clipfactory import campaigns, check
         campaigns.save("own-gta6", {"name": "GTA 6", "platforms": ["youtube"]}, "yaml")

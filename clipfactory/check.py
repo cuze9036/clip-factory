@@ -116,6 +116,7 @@ def _validate(d):
     # on the same page), so any blocker makes it "no", with the reason listed.
     needs = d.get("needs") if isinstance(d.get("needs"), dict) else {}
     hits = [why for key, why in BLOCKERS.items() if needs.get(key) is True]
+    out["blockers"] = [key for key in BLOCKERS if needs.get(key) is True]
     if hits:
         out["verdict"] = "no"
         out["cannot"] = (hits + [x for x in out["cannot"] if x not in hits])[:5]
@@ -137,6 +138,12 @@ def run(c):
                            blocked=", ".join(campaigns._extra(c).get("blocked_links") or []) or "none",
                            text=_texts(c)[:50000] or "(only the rules and guide above)")
     data, provider = llm.complete_json("campaign_check", prompt, _validate)
+    if data.get("blockers") == ["non_english_text"] and campaigns._extra(c).get("captions") == "off":
+        # this campaign's clips carry no added text at all, so a rule about the language of on-screen text holds
+        data = dict(data, verdict="partial", blockers=[],
+                    cannot=[x for x in data["cannot"] if x != BLOCKERS["non_english_text"]][:5],
+                    owner_todo=(["Clips carry no added text (💬 Captions off); post captions are in the campaign's "
+                                 "language"] + data["owner_todo"])[:5])
     data["digest"] = digest(c)
     c = campaigns.get(c["id"])
     extra = campaigns._extra(c)

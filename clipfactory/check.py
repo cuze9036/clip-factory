@@ -37,7 +37,8 @@ What it CANNOT do:
   these by hand).
 - Follow a shot-by-shot editing job: replace given shots with provided substitute files, re-edit a video to an
   exact edit list, or keep a full video as it is apart from listed changes.
-- Burn on-screen captions or hook text in a language other than English (it can leave its own captions out).
+- Burn on-screen captions or hook text in a language other than English. It CAN add no text to the video at all
+  (the footage's own speech and text only), which meets "on-screen text must be in <language>" rules.
   Post titles, descriptions and hashtags CAN be written in the campaign's language (e.g. Arabic).
 - Post more than about 10 YouTube uploads a day."""
 
@@ -62,8 +63,10 @@ Return JSON only:
                                      recorded gameplay of our own),
             "shot_by_shot_edit": true/false (the job is to replace given shots with provided files, or re-edit
                                   videos to an exact edit list, instead of cutting the best moments),
-            "non_english_text": true/false (text burned ON the video must be in a language other than English;
-                                 the post's caption / title / hashtags in another language do NOT count)}},
+            "non_english_text": true/false (true ONLY when the campaign insists on words burned ON the video in a
+                                 language other than English; a post caption / title / hashtags in another
+                                 language do NOT count, and neither does a rule the tool meets by adding no
+                                 text to the video at all)}},
   "verdict": "go" (the tool can make clips that follow the rules) | "partial" (some parts need the owner or some
              clips/platforms can't be done, but clips can be made) | "no" (the campaign's main deliverable needs
              things the tool can't do, like filming, voice-over, a shot-by-shot substitution edit, or captions in

@@ -15,6 +15,8 @@ NOT_SHARED = ("That Google Doc isn't open to anyone with the link, so I can't re
 PROMPT = """Below are a clipping campaign's instructions or reference material for clippers.
 Turn them into short, clear instructions for an AI that picks moments from long videos and writes clip titles and
 captions. Keep only what changes how clips should be made or posted. Plain English.
+In clipping briefs "caption" (الكابشن, "el caption", ...) usually means the post's text under the video: write
+"post caption" then, and only say "on-screen text" when the brief clearly means words burned on the video.
 
 Return JSON only:
 {{"do": ["up to 12 lines, max 15 words each: what good clips for this campaign show or do"],

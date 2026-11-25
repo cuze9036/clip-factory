@@ -50,9 +50,9 @@ class InsightsTest(unittest.TestCase):
         self.assertIn('"instagram 20:00"', m.call_args[0][1])          # slot numbers went to the AI
         self.assertIn("📊 **Weekly review**", report)
         self.assertIn("12 posts made", report)
-        self.assertIn("✅ Instagram at 20:00 ET averages the most views", report)
+        self.assertRegex(report, r"✅ Instagram at [56]:30 AM averages the most views")   # 20:00 ET in India time
         self.assertIn("💡 Raise the AI score", report)
-        self.assertIn("⚙️ Skipping weak posting slots: instagram 12:00 ET", report)
+        self.assertRegex(report, r"⚙️ Skipping weak posting slots: instagram (9|10):30 PM")
         self.assertEqual(insights.skipped_slots("instagram"), ["12:00"])
         block = llm.rules_block(campaigns.get(cid))
         self.assertIn("Title: Start the title with the surprise", block)

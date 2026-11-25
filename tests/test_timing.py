@@ -84,6 +84,14 @@ class TimingTest(unittest.TestCase):
         self.assertEqual(p["status"], "queued")
         self.assertTrue(schedule.awake(publish.parse_iso(p["scheduled_at"]), 30))
 
+    def test_owner_sees_india_time_only(self):
+        from clipfactory.util import ET, own_time, own_times_in
+        now = dt.datetime(2030, 1, 7, 12, 0, tzinfo=ET)                     # 10:30 PM in India
+        self.assertEqual(own_time(now, now), "today 10:30 PM")
+        self.assertEqual(own_time(now + dt.timedelta(hours=8), now), "tomorrow 6:30 AM")
+        self.assertEqual(own_time(now + dt.timedelta(days=3), now), "Thu 10 Jan, 10:30 PM")
+        self.assertRegex(own_times_in("Posts at 20:00 ET do best"), r"Posts at [56]:30 AM do best")
+
     def test_new_source_is_checked_right_away(self):
         from clipfactory import campaigns, db, pipeline
         cid = campaigns.suggest({"name": "Band Live", "platforms": ["youtube"], "rate_per_1k": 2}, "pasted")

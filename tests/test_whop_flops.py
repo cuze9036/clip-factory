@@ -135,7 +135,7 @@ class LaneTest(unittest.TestCase):
         self.assertIn("Submit now: Kitsch", head)
         self.assertIn("YouTube Short 2", head)                 # the second one on YouTube for this campaign
         self.assertIn("submit by", head)
-        self.assertIn("IST", head)
+        self.assertRegex(head, r"submit by (today|tomorrow) \d{1,2}:\d\d [AP]M")   # India time only
         self.assertEqual(link, "https://youtu.be/x")           # the link alone: easy to copy
         self.assertEqual(sent.call_args_list[0].kwargs["buttons"][0][0], "✅ Done")
 

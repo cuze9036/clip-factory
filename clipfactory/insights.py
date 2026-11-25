@@ -17,7 +17,7 @@ import json
 from collections import defaultdict
 
 from . import config, db, llm, notify
-from .util import ET, iso, parse_iso, utcnow
+from .util import ET, et_slot_own, own_times_in, iso, parse_iso, utcnow
 
 TIPS_KEY = "insights_tips"
 SKIP_KEY = "insights_skip_slots"
@@ -174,7 +174,7 @@ def run(days=7, send=True):
         if skips != (db.kv_get(SKIP_KEY) or {}):
             db.kv_set(SKIP_KEY, skips)
             if skips:
-                changes.append("Skipping weak posting slots: " + "; ".join(f"{p} {', '.join(s)} ET" for p, s in skips.items()))
+                changes.append("Skipping weak posting slots: " + "; ".join(f"{p} {', '.join(et_slot_own(x) for x in s)}" for p, s in skips.items()))
             else:
                 changes.append("Using every posting slot again")
     db.kv_set("insights_last_run", iso(utcnow()))
@@ -209,12 +209,12 @@ def format_report(data, ai, changes):
         out.append(f"Not enough posts yet for real advice (needs {config.section('insights').get('min_posts', 5)}+ "
                    "with views). I'll look again next week.")
     if ai:
-        out.append(f"\n{ai['summary']}")
+        out.append(f"\n{own_times_in(ai['summary'])}")
         for title, key, icon in (("Working", "working", "✅"), ("Not working", "not_working", "⚠️"),
                                  ("Suggestions for you", "suggestions", "💡"), ("Problems to fix", "problems", "🔧")):
             if ai[key]:
                 out.append(f"**{title}**")
-                out += [f"{icon} {x}" for x in ai[key]]
+                out += [f"{icon} {own_times_in(x)}" for x in ai[key]]
     if data["hand_posts_not_made"]:
         out.append(f"🔧 {data['hand_posts_not_made']} hand-post(s) were not made in time (see `!todo`).")
     if data["errors"]:

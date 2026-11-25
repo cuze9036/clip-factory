@@ -4,7 +4,7 @@ import json
 from flask import Flask, abort, redirect, render_template, request, send_from_directory, url_for
 
 from . import campaigns, config, db, review, watcher
-from .util import ET, fmt_ts, iso, parse_iso, utcnow
+from .util import fmt_ts, iso, own_time, parse_iso, utcnow
 
 app = Flask(__name__)
 
@@ -13,8 +13,7 @@ app = Flask(__name__)
 def _et(s):
     if not s:
         return "never"
-    d = parse_iso(s).astimezone(ET)
-    return f"{d:%a %b} {d.day}, {d.hour % 12 or 12}:{d:%M %p} ET"
+    return own_time(parse_iso(s))   # the owner's time (India); posts are still planned in US Eastern
 
 
 @app.template_filter("ago")

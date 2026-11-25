@@ -49,8 +49,8 @@ class ManualPostingTest(unittest.TestCase):
         tg = self._run()
         tg.assert_called_once()
         when = tg.call_args[0][4]
-        self.assertIn(" ET", when)
-        self.assertIn("IST", when)                               # owner's time next to US Eastern
+        self.assertNotIn("ET", when)                             # one time only: the owner's (India)
+        self.assertRegex(when, r"\d{1,2}:\d\d [AP]M$")
         self.assertIn("#Sponsored", tg.call_args[0][2].splitlines()[0])
         p = db.one("SELECT * FROM posts WHERE id=?", pid)
         self.assertTrue(p["delivered_at"])

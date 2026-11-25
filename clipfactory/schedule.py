@@ -3,7 +3,7 @@ import datetime as dt
 import random
 
 from . import campaigns, config, db
-from .util import ET, iso, parse_iso, utcnow
+from .util import ET, own_time, iso, parse_iso, utcnow
 
 
 def _taken(platform, account):
@@ -107,5 +107,5 @@ def schedule_clip(clip_id):
         db.x("INSERT INTO posts(clip_id, campaign_id, platform, account, scheduled_at, mode) VALUES(?,?,?,?,?,?)",
              clip_id, c["id"], platform, account, iso(when), publish.mode(platform, account) or "auto")
     db.x("UPDATE clips SET status='scheduled' WHERE id=?", clip_id)
-    db.log(c["id"], f"Clip {clip_id} scheduled for {first.astimezone(ET):%a %b %d, %I:%M %p} ET")
+    db.log(c["id"], f"Clip {clip_id} scheduled for {own_time(first)}")
     return first

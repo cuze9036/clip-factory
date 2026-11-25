@@ -7,6 +7,45 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 
 
+def own_tz():
+    """The owner's time zone (owner_timezone, India): every time the owner reads is shown in it, while posts are
+    still planned for US viewers in Eastern time."""
+    from . import config
+    try:
+        return ZoneInfo(config.get().get("owner_timezone") or "Asia/Kolkata")
+    except Exception:
+        return ET
+
+
+def own_time(t, now=None, day=True):
+    """'today 8:30 PM', 'tomorrow 6:30 AM' or 'Thu 27 Nov, 8:30 AM' in the owner's time (one time, no ET)."""
+    tz = own_tz()
+    t = t.astimezone(tz)
+    clock = f"{t.hour % 12 or 12}:{t:%M %p}"
+    if not day:
+        return clock
+    today = (now or utcnow()).astimezone(tz).date()
+    if t.date() == today:
+        return f"today {clock}"
+    if t.date() == today + dt.timedelta(days=1):
+        return f"tomorrow {clock}"
+    if t.date() == today - dt.timedelta(days=1):
+        return f"yesterday {clock}"
+    return f"{t:%a} {t.day} {t:%b}, {clock}"
+
+
+def et_slot_own(hhmm, on=None):
+    """An Eastern-time slot like '20:00' as the owner's clock time ('6:30 AM'), for today's date."""
+    h, m = map(int, hhmm.split(":"))
+    d = (on or utcnow()).astimezone(ET).date()
+    return own_time(dt.datetime.combine(d, dt.time(h, m), tzinfo=ET), day=False)
+
+
+def own_times_in(text):
+    """'Instagram at 20:00 ET does best' → 'Instagram at 6:30 AM does best' (AI text written from ET numbers)."""
+    return re.sub(r"\b(\d{1,2}):(\d{2}) ?ET\b", lambda m: et_slot_own(f"{m.group(1)}:{m.group(2)}"), text or "")
+
+
 def utcnow():
     return dt.datetime.now(dt.timezone.utc)
 

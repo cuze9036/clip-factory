@@ -300,21 +300,9 @@ def ready_folder(platform):
 
 
 def when_text(post):
-    """'9:00 PM ET (7:30 AM IST)' for a post's time."""
-    from zoneinfo import ZoneInfo
-    from .util import ET
-    t = parse_iso(post["scheduled_at"])
-    et = t.astimezone(ET)
-    out = f"{et:%I:%M %p}".lstrip("0") + " ET"
-    tz = config.get().get("owner_timezone")
-    if tz:
-        try:
-            own = t.astimezone(ZoneInfo(tz))
-            day = "" if own.date() == et.date() else f" {own:%a}"
-            out += f" ({own:%I:%M %p}".replace("(0", "(") + f"{day} {own.tzname()})"
-        except Exception:
-            pass
-    return out
+    """'today 8:30 PM' for a post's time, in the owner's time (India). Posts are planned in US Eastern time."""
+    from .util import own_time
+    return own_time(parse_iso(post["scheduled_at"]))
 
 
 def is_manual(post):

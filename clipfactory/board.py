@@ -15,7 +15,7 @@ import hashlib
 import json
 
 from . import campaigns, config, db, llm
-from .util import ET, iso, parse_iso, utcnow
+from .util import ET, own_time, iso, parse_iso, utcnow
 
 TIERS = {"low": "⚪ LOW PRIORITY", "second": "🥈 SECOND PRIORITY", "first": "🥇 FIRST PRIORITY",
          "running": "▶ RUNNING"}
@@ -197,7 +197,7 @@ def plan(max_ai=5):
              for t, _, c, eff in live]
     counts = {t: sum(1 for i in items if i["tier"] == t) for t in ORDER}
     items.append({"key": "live:summary", "tier": "summary", "buttons": [], "text": (
-        f"**Campaign updates** · {now:%b %d, %I:%M %p} ET\n"
+        f"**Campaign updates** · {own_time(now)}\n"
         f"🥇 {counts['first']} first · 🥈 {counts['second']} second · ⚪ {counts['low']} low\n"
         "Priority = pay per 1K + budget left per clipper + how easy the clips are (AI) + whether you can post there.\n"
         "Tap **Open campaign**, join on Whop, then **I joined** and paste the campaign page.")})
@@ -214,7 +214,7 @@ def plan(max_ai=5):
                                     ["💬 Captions: " + campaigns._extra(c).get("captions", "auto"), f"cap:{c['id']}", "grey"]],
                         "text": card(c, "running", effort(c, allow_ai=False))})
     running.append({"key": "running:summary", "tier": "summary", "buttons": [], "text": (
-        f"**Active campaigns** · {now:%b %d, %I:%M %p} ET\n"
+        f"**Active campaigns** · {own_time(now)}\n"
         f"▶ {sum(1 for r in running if 'NOT RUNNING YET' not in r['text'])} running"
         + (f" · ⏳ {sum(1 for r in running if 'NOT RUNNING YET' in r['text'])} waiting for footage"
            if any('NOT RUNNING YET' in r['text'] for r in running) else "")

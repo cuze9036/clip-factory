@@ -10,7 +10,7 @@ import datetime as dt
 from collections import defaultdict
 
 from . import campaigns, db, notify
-from .util import ET, iso, parse_iso, utcnow
+from .util import ET, own_time, iso, parse_iso, utcnow
 
 
 def _ago(hours):
@@ -69,7 +69,7 @@ def report():
     now = dt.datetime.now(ET)
     posted = db.one("SELECT COUNT(*) n FROM posts WHERE status IN ('posted','uploaded') AND posted_at >= ?", _ago(24))["n"]
     made = db.one("SELECT COUNT(*) n FROM clips WHERE created_at >= ?", _ago(24))["n"]
-    head = f"🩺 **Daily check** · {now:%b %d, %I:%M %p} ET · last 24 h: {made} clips made, {posted} posts out"
+    head = f"🩺 **Daily check** · {own_time(now)} · last 24 h: {made} clips made, {posted} posts out"
     from . import autofix
     fixed = autofix.recent_log(24)
     tail = ("\n🛠️ **Fixed by itself (24 h)**\n" + "\n".join(f"• {t}" for t in fixed[-8:])) if fixed else ""

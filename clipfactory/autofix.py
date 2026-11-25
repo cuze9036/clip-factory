@@ -60,7 +60,20 @@ def _retry(table, status_sql, new_status, kind, extra=""):
 
 def _meta_ok(platform):
     from . import selftest
-    return selftest._check(platform, selftest._meta(platform)).startswith("OK")
+    r = selftest._check(platform, selftest._meta(platform))
+    # Meta out of reach (no internet) says nothing about the key: only a refusal counts as a broken key
+    return r.startswith("OK") or any(w in r for w in ("could not be reached", "Connection", "timed out", "Timeout"))
+
+
+def _meta_ok_cached(platform, minutes=30):
+    """Asks Meta at most every 30 minutes whether the platform's key works."""
+    k = f"meta_ok:{platform}"
+    got = db.kv_get(k)
+    if got and utcnow() - parse_iso(got["at"]) < dt.timedelta(minutes=minutes):
+        return got["ok"]
+    ok = _meta_ok(platform)
+    db.kv_set(k, {"at": iso(utcnow()), "ok": ok})
+    return ok
 
 
 def fix():
@@ -83,11 +96,17 @@ def fix():
                            (status='queued' AND scheduled_at < '{_ago(1)}') OR
                            (status='failed' AND scheduled_at >= '{_ago(24)}' AND COALESCE(error,'') NOT LIKE 'skipped%'))""",
                      platform)
+        upcoming = db.q("SELECT id FROM posts WHERE platform=? AND mode='auto' AND status='queued'", platform)
+        broken = bool(stuck or upcoming) and not _meta_ok_cached(platform)
+        if broken:
+            # the key is refused: every later post goes to Telegram now, so it arrives early instead of failing
+            stuck = list({p["id"]: p for p in list(stuck) + list(upcoming)}.values())
         if not stuck:
             continue
-        reason = "its key isn't working (see /selftest)" if not _meta_ok(platform) else "the upload failed"
+        reason = "its key isn't working (see /selftest)" if broken else "the upload failed"
         for p in stuck:
             db.x("UPDATE posts SET mode='manual', status='queued', error=NULL WHERE id=?", p["id"])
+            db.kv_set(f"handed:{p['id']}", True)   # stays with you: it isn't switched back to automatic
         done.append(f"{len(stuck)} {platform.title()} post(s) couldn't go out by themselves ({reason}), so they "
                     "come to you on Telegram now")
 

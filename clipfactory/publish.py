@@ -376,6 +376,8 @@ def run_manual():
     # A platform that can now post by itself (keys added, or YouTube no longer hand-posted): its queued posts
     # that weren't announced yet switch to automatic.
     for post in db.q("SELECT * FROM posts WHERE status='queued' AND mode='manual' AND reminded_at IS NULL"):
+        if db.kv_get(f"handed:{post['id']}"):
+            continue   # auto-fix gave it to you because posting by itself failed: it stays with you
         if post["platform"] not in (config.get().get("always_manual") or []) and \
                 post["platform"] in UPLOADERS and _has_keys(post["platform"], post["account"]):
             db.x("UPDATE posts SET mode='auto' WHERE id=?", post["id"])

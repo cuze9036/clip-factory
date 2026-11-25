@@ -54,6 +54,25 @@ class AutofixTest(unittest.TestCase):
         row = db.one("SELECT * FROM posts WHERE id=?", p)
         self.assertEqual((row["mode"], row["status"]), ("manual", "queued"))
 
+    def test_refused_key_hands_over_once_and_later_posts_early(self):
+        from clipfactory import autofix, db, publish
+        from clipfactory.util import iso, utcnow
+        cid = self._camp()
+        k = db.x("INSERT INTO clips(campaign_id, status) VALUES(?,?)", cid, "scheduled")
+        sql = ("INSERT INTO posts(clip_id, campaign_id, platform, account, scheduled_at, status, mode, error) "
+               "VALUES(?,?,?,?,?,?,?,?)")
+        late = db.x(sql, k, cid, "instagram", "main", iso(utcnow() - dt.timedelta(hours=3)), "failed", "auto", "400")
+        later = db.x(sql, k, cid, "instagram", "main", iso(utcnow() + dt.timedelta(days=2)), "queued", "auto", None)
+        with mock.patch.object(autofix, "_meta_ok", return_value=False) as ok:
+            self.assertIn("2 Instagram post(s)", autofix.fix()[0])
+            # the keys are still in .env, but the posts it handed over stay with you (no loop every 5 minutes)
+            with mock.patch.object(publish, "_has_keys", return_value=True),                     mock.patch.object(publish, "deliver"), mock.patch.object(publish, "remind"):
+                publish.run_manual()
+            self.assertEqual(autofix.fix(), [])
+        self.assertEqual(ok.call_count, 1)                                # Meta asked once, not every run
+        for p in (late, later):
+            self.assertEqual(db.one("SELECT mode FROM posts WHERE id=?", p)["mode"], "manual")
+
     def test_missed_hand_post_gets_one_more_reminder(self):
         from clipfactory import autofix, db
         from clipfactory.util import iso, utcnow

@@ -40,13 +40,11 @@ STEP 4 - Instagram and Facebook (about 30 minutes, optional at first)
   1. Instagram app: switch to a Professional account (Creator or Business)
   2. Create a Facebook Page and link the Instagram account to it
   3. developers.facebook.com > Create app (Business) > add Instagram
-  4. Graph API Explorer: get a user token with instagram_basic, instagram_content_publish,
-     instagram_manage_insights, pages_show_list, pages_read_engagement, pages_manage_posts,
-     publish_video > exchange it for a long-lived token
-  5. me/accounts gives your Page ID and Page token;
-     <page-id>?fields=instagram_business_account gives your Instagram user ID
-  6. Run the installer again and paste them
-  7. Every 2 months: make a new long-lived Instagram token and paste it again
+  4. On the laptop run:  powershell -ExecutionPolicy Bypass -File windows\meta-login.ps1
+     It tells you what to tick in Graph API Explorer; paste the ONE token it asks for (and the App Secret
+     once, from App settings > Basic). It finds your Page and Instagram account, saves all four keys and
+     checks them. Nothing else to copy.
+  5. If Meta ever refuses the keys again (you get a note in #ai-insights), run step 4 again
 
 STEP 4b - Telegram, for Instagram clips you post yourself (5 minutes)
   1. In Telegram, open @BotFather, send /newbot, pick a name. Copy the token it gives you.

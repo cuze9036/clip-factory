@@ -62,7 +62,7 @@ def _meta_ok(platform):
     from . import selftest
     r = selftest._check(platform, selftest._meta(platform))
     # Meta out of reach (no internet) says nothing about the key: only a refusal counts as a broken key
-    return r.startswith("OK") or any(w in r for w in ("could not be reached", "Connection", "timed out", "Timeout"))
+    return r.startswith("OK") or any(w in r for w in ("could not reach", "could not be reached", "Connection", "timed out", "Timeout"))
 
 
 def _meta_ok_cached(platform, minutes=30):
@@ -104,11 +104,14 @@ def fix():
         if not stuck:
             continue
         reason = "its key isn't working (see /selftest)" if broken else "the upload failed"
+        new = 0
         for p in stuck:
             db.x("UPDATE posts SET mode='manual', status='queued', error=NULL WHERE id=?", p["id"])
-            db.kv_set(f"handed:{p['id']}", True)   # stays with you: it isn't switched back to automatic
-        done.append(f"{len(stuck)} {platform.title()} post(s) couldn't go out by themselves ({reason}), so they "
-                    "come to you on Telegram now")
+            new += not db.kv_get(f"handed:{p['id']}")
+            db.kv_set(f"handed:{p['id']}", True)   # stays with you while the key doesn't work
+        if new:   # said once per post, not again each time a post is re-checked
+            done.append(f"{new} {platform.title()} post(s) couldn't go out by themselves ({reason}), so they "
+                        "come to you on Telegram now")
 
     # Hand-posts you missed: one more reminder.
     for p in db.q(f"SELECT * FROM posts WHERE status='manual' AND scheduled_at < '{_ago(2)}' AND scheduled_at >= '{_ago(24)}'"):

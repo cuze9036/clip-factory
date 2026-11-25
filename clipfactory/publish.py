@@ -377,7 +377,12 @@ def run_manual():
     # that weren't announced yet switch to automatic.
     for post in db.q("SELECT * FROM posts WHERE status='queued' AND mode='manual' AND reminded_at IS NULL"):
         if db.kv_get(f"handed:{post['id']}"):
-            continue   # auto-fix gave it to you because posting by itself failed: it stays with you
+            # auto-fix gave it to you because posting by itself failed. Once it's on Telegram it stays yours;
+            # before that it goes back to automatic when the key works again (new keys, or not checked lately)
+            known = db.kv_get(f"meta_ok:{post['platform']}")
+            if post.get("delivered_at") or (known and not known["ok"] and
+                                            utcnow() - parse_iso(known["at"]) < dt.timedelta(minutes=30)):
+                continue
         if post["platform"] not in (config.get().get("always_manual") or []) and \
                 post["platform"] in UPLOADERS and _has_keys(post["platform"], post["account"]):
             db.x("UPDATE posts SET mode='auto' WHERE id=?", post["id"])

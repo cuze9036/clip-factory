@@ -28,6 +28,7 @@ def main(argv=None):
     au.add_argument("account", nargs="?", default="main")
     ad = sub.add_parser("auth-drive", help="connect Google Drive (read-only) for campaign footage in private folders")
     ad.add_argument("account", nargs="?", default="main")
+    sub.add_parser("poster-setup", help="send TikTok / X clips to your helper's Discord channel")
     sub.add_parser("meta-login", help="connect Instagram + Facebook: paste one token, the rest is found by itself")
     ag = sub.add_parser("auth-gmail", help="connect Gmail (read-only) to watch for Google's YouTube API audit emails")
     ag.add_argument("account", nargs="?", default="main")
@@ -100,6 +101,9 @@ def main(argv=None):
     elif args.cmd == "auth-drive":
         from . import gdrive
         gdrive.auth(args.account)
+    elif args.cmd == "poster-setup":
+        from . import poster
+        return poster.setup()
     elif args.cmd == "meta-login":
         from . import meta_login
         return meta_login.main()

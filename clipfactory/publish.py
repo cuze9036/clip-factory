@@ -324,7 +324,11 @@ def deliver(post, clip):
     """Early: the video and caption go to Telegram (and 'Ready to post') hours before the posting time."""
     name_, caption = _ready_files(post, clip)
     camp = db.one("SELECT name FROM campaigns WHERE id=?", post["campaign_id"])
-    from . import telegram
+    from . import poster, telegram
+    if poster.handles(post["platform"]):   # your helper's Discord channel posts it (with the link back)
+        poster.deliver(post, clip, caption, camp["name"], when_text(post))
+        db.x("UPDATE posts SET delivered_at=? WHERE id=?", iso(utcnow()), post["id"])
+        return name_
     try:
         telegram.hand_off(post, clip, caption, camp["name"], when_text(post))
     except Exception as e:
@@ -340,6 +344,10 @@ def remind(post, clip):
     camp = db.one("SELECT name FROM campaigns WHERE id=?", post["campaign_id"])
     where = "on Telegram" if telegram.creds() else "in Clipping Tools\\Ready to post\\" + post["platform"]
     db.x("UPDATE posts SET status='manual', reminded_at=?, error=NULL WHERE id=?", iso(utcnow()), post["id"])
+    from . import poster
+    if poster.handles(post["platform"]):   # the helper is reminded in their channel; you get the link to submit
+        poster.remind(post, when_text(post))
+        return
     notify.send("manual", f"⏰ **Time to post on {name(post['platform'])}** at {when_text(post)} · "
                 f"post {post['id']} · {camp['name']}\n"
                 f"The video and caption are {where} (sent earlier). Post it within {within} minutes, then "

@@ -3,6 +3,7 @@ Only the owner (DISCORD_OWNER_ID) in the control channel (DISCORD_CHANNEL_ID) ca
 import asyncio
 import datetime
 import os
+import re
 import subprocess
 
 import discord
@@ -67,6 +68,8 @@ class Bot(discord.Client):
         self.board_ids = {}
         self.insights_id = None   # #ai-insights: weekly review and daily check
         self.submit_id = self.done_id = None   # #clip-submission (to submit) and #approved-clips (done)
+        from . import poster
+        self.poster_id = poster.channel_id()   # your helper's channel for TikTok / X clips (any server)
 
     async def setup_hook(self):
         self.tree = discord.app_commands.CommandTree(self)
@@ -109,6 +112,8 @@ class Bot(discord.Client):
         await self.find_board(ch)
         await self.find_insights(ch)
         await self.find_submit(ch)
+        from . import poster
+        await asyncio.to_thread(poster.help_once)   # how the helper's channel works, sent once
         name = (config.section("discord").get("feed_channel") or "").lstrip("#")
         feed = discord.utils.get(ch.guild.text_channels, name=name) if name and ch.guild else None
         if feed:
@@ -272,7 +277,12 @@ class Bot(discord.Client):
         while not self.is_closed():
             for row in await asyncio.to_thread(notify.pending):
                 try:
-                    small = await asyncio.to_thread(preview, row["file_path"]) if row["file_path"] else None
+                    if row["kind"] == "poster":   # the helper posts this file: full quality when it fits
+                        from . import poster
+                        small = await asyncio.to_thread(poster.share_copy, row["file_path"], MAX_UPLOAD) \
+                            if row["file_path"] else None
+                    else:
+                        small = await asyncio.to_thread(preview, row["file_path"]) if row["file_path"] else None
                     kwargs = {}
                     if small:
                         kwargs["file"] = discord.File(small)
@@ -285,6 +295,8 @@ class Bot(discord.Client):
                         target = self.get_channel(self.submit_id) or ch
                     elif row["kind"] == "submitted" and self.done_id:
                         target = self.get_channel(self.done_id) or ch
+                    elif row["kind"] == "poster" and self.poster_id:
+                        target = self.get_channel(self.poster_id) or await self.fetch_channel(self.poster_id)
                     msg = await target.send(row["text"], **kwargs)
                     notify.mark_sent(row["id"], str(msg.id))
                 except Exception as e:
@@ -327,7 +339,30 @@ class Bot(discord.Client):
                                                             self.done_id)
                                              or channel_id in self.board_ids.values())
 
+    async def poster_message(self, message):
+        """In the helper's channel: a reply to a clip's video (or "post 12 <link>") carries the post's link."""
+        from . import poster
+        if message.author.bot or not poster.may_use(message.author.id, self.owner_id):
+            return
+        text = (message.content or "").strip()
+        pid = None
+        if message.reference and message.reference.message_id:
+            pid = await asyncio.to_thread(poster.post_for_message, message.reference.message_id)
+        m = re.search(r"\bpost\s*#?(\d+)", text, re.I)
+        if not pid and m:
+            pid = int(m.group(1))
+        if not pid:
+            if "http" in text:
+                await message.reply("Tap **✅ Posted** under the video (or reply to the video with the link), so I "
+                                    "know which post this is.")
+            return
+        reply = await asyncio.to_thread(poster.posted, pid, text, message.author.display_name)
+        await message.reply(reply)
+
     async def on_message(self, message):
+        if self.poster_id and message.channel.id == self.poster_id:
+            await self.poster_message(message)
+            return
         if self.feed_id and message.channel.id == self.feed_id:
             await self.read_feed(message)   # followed announcement posts arrive as bot/webhook messages
             return
@@ -366,6 +401,10 @@ class Bot(discord.Client):
     async def on_interaction(self, interaction):
         if interaction.type != discord.InteractionType.component:
             return   # slash commands are handled by the command tree
+        cid = interaction.data.get("custom_id", "")
+        if cid.startswith(("pp:", "pn:")):   # the helper's ✅ Posted / ❌ Can't post
+            await self.poster_button(interaction, cid)
+            return
         if not self._allowed(interaction.user.id, interaction.channel_id):
             await interaction.response.send_message("Only the owner can use these buttons.", ephemeral=True)
             return
@@ -380,6 +419,47 @@ class Bot(discord.Client):
                 pass
         # ✅ Done replies only to you, so #clip-submission keeps only what's left to submit
         await interaction.followup.send(reply, ephemeral=interaction.data.get("custom_id", "").startswith("sub:"))
+
+
+class LinkModal(discord.ui.Modal, title="Link of your post"):
+    link = discord.ui.TextInput(label="Paste the link of the post", placeholder="https://www.tiktok.com/@name/video/…",
+                                max_length=400)
+
+    def __init__(self, post_id, message):
+        super().__init__()
+        self.post_id, self.message = post_id, message
+
+    async def on_submit(self, interaction):
+        from . import poster
+        reply = await asyncio.to_thread(poster.posted, self.post_id, str(self.link.value),
+                                        interaction.user.display_name)
+        if reply.startswith("✅"):
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+        await interaction.response.send_message(reply)
+
+
+async def _poster_button(bot, interaction, cid):
+    from . import poster
+    if not poster.may_use(interaction.user.id, bot.owner_id):
+        await interaction.response.send_message("These buttons are for the poster only.", ephemeral=True)
+        return
+    kind, _, pid = cid.partition(":")
+    if kind == "pp":   # ask for the link in a small form
+        await interaction.response.send_modal(LinkModal(int(pid), interaction.message))
+        return
+    await interaction.response.defer()
+    reply = await asyncio.to_thread(poster.cant, int(pid), interaction.user.display_name)
+    try:
+        await interaction.message.edit(view=None)
+    except discord.HTTPException:
+        pass
+    await interaction.followup.send(reply)
+
+
+Bot.poster_button = _poster_button
 
 
 def run():

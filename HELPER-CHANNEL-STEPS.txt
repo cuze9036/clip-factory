@@ -1,0 +1,70 @@
+HELPER CHANNEL: TikTok / X clips ek helper post karega (Discord se)
+=====================================================================
+
+Kya hoga:
+  - TikTok aur X ki har clip (video + caption) Telegram ki jagah helper ke Discord channel mein jayegi.
+  - Helper post karega, video ke neeche "✅ Posted" dabayega aur post ka link paste karega.
+  - Link aate hi tool post ko live maan lega, aur aapke #clip-submission mein "📌 Submit now" + link aa jayega.
+    Aap wahi link Whop par submit karke ✅ Done dabaoge (pehle jaisa).
+  - Helper post na kar paaye to "❌ Can't post" dabayega; aapko #general mein message aayega.
+  - Helper sirf ye 2 button daba sakta hai aur link bhej sakta hai. Koi command nahi chala sakta.
+
+
+STEP 1 - Naya Discord server banao (2 min)
+  1. Discord kholo. Left side mein sabse neeche "+" (Add a Server) dabao.
+  2. "Create My Own" -> "For me and my friends".
+  3. Naam do, jaise "Clip Posting". Create dabao.
+  4. Server mein ek text channel banao, jaise #to-post
+     (channel list mein "+" ke paas "Create Channel" -> Text -> naam: to-post -> Create).
+
+
+STEP 2 - Apna bot (ClipBot) is server mein add karo (1 min)
+  1. Browser mein ye link kholo (yahi aapka bot hai):
+     https://discord.com/oauth2/authorize?client_id=1573266340679127155&scope=bot+applications.commands&permissions=117760
+  2. "Add to Server" mein apna naya server (Clip Posting) chuno -> Continue.
+  3. Jo permissions dikhengi (View Channels, Send Messages, Attach Files, Read Message History, Embed Links)
+     sab tick rehne do -> Authorize -> "I am human" verify karo.
+  4. Server ki member list mein "ClipBot" dikhne lagega. Bas.
+
+
+STEP 3 - Helper ko server mein bulao (1 min)
+  1. Server ke naam par click -> "Invite People" -> link copy karke helper ko bhejo.
+  2. Helper join kar le.
+
+
+STEP 4 - Channel ID copy karo (1 min)
+  1. Discord -> neeche apni photo ke paas ⚙️ (User Settings) -> "Advanced" -> "Developer Mode" ON.
+  2. Server mein #to-post channel par RIGHT-CLICK -> "Copy Channel ID".
+     (Phone par: channel ko dabaye rakho -> "Copy ID".)
+  3. (Optional) Helper ke naam par right-click -> "Copy User ID".
+     Ye do to sirf wahi helper "✅ Posted" daba payega. Na do to us channel mein koi bhi daba sakta hai.
+
+
+STEP 5 - Tool ko batao (1 min)
+  Laptop par PowerShell kholo aur ye chalao:
+
+     powershell -ExecutionPolicy Bypass -File "$([Environment]::GetFolderPath('Desktop'))\Clipping Tools\windows\poster-setup.ps1"
+
+  1. "Paste the channel ID" par STEP 4 wala Channel ID paste karo (Ctrl+V) -> Enter.
+  2. "Helper's user ID" par helper ka User ID paste karo -> Enter. (Nahi hai to seedha Enter.)
+  3. "Saved" likha aayega. Bas. ~10 second mein tool khud restart hoga.
+
+  Ye settings is file mein save hoti hain (khud kuch likhna nahi hai):
+     C:\Users\KHUSHAI\Desktop\Clipping Tools\config.local.yaml   (section "poster:")
+
+
+STEP 6 - Check karo
+  - #to-post channel mein bot ek message bhejega: "👋 How this channel works" (helper ke liye steps).
+  - Agli TikTok / X clip wahan aayegi: upar video + time (India), neeche caption, aur ✅ Posted / ❌ Can't post.
+
+
+Helper ko kya karna hai (bot khud bhi channel mein batata hai):
+  1. Video download karo (video par click -> download), caption copy karo.
+  2. Diye gaye time par TikTok / X par post karo, wahi caption ke saath.
+  3. Video ke neeche "✅ Posted" dabao -> chhota box khulega -> post ka link paste karo -> Submit.
+     (Ya video par Reply karke link bhej do.)
+  4. Bot "✅ Saved post 12" likhega. Ho gaya.
+
+
+Band karna ho (wapas Telegram):
+  config.local.yaml mein "poster:" ke neeche channel_id: "" kar do aur save karo.

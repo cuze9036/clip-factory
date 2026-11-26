@@ -168,6 +168,11 @@ discord:
   feed_channel: campaign-feed     # follow clipping communities' announcement channels into this channel;
                                   # the bot reads every post there and turns campaigns into suggestions
 
+poster:                           # a helper posts the TikTok / X clips for you from a Discord channel (poster.py)
+  channel_id: ""                  # set it in config.local.yaml: that channel's ID (it can be in another server)
+  helper_ids: []                  # Discord user IDs who may press ✅ Posted there (empty = anyone in that channel)
+  platforms: [tiktok, x]          # these go to that channel instead of Telegram
+
 insights:                         # weekly self-review with the free AI (Gemini / Free LLM API)
   enabled: true
   every_days: 7

@@ -43,6 +43,9 @@ def set_recipe(cid, end_card, **over):
     extra["recipe"] = {"name": "ai_reveal", "end_card": str(end_card), **over}
     extra["captions"] = "off"   # the recipe's own lines are the only text on screen
     db.x("UPDATE campaigns SET notes=? WHERE id=?", json.dumps(extra), cid)
+    # clips skipped earlier as "too short" are this format's footage
+    db.x("UPDATE videos SET status='waiting', error=NULL WHERE campaign_id=? AND status='skipped' AND error='too short'",
+         cid)
 
 
 # ---------- stage: a footage video → one planned clip ----------
@@ -61,7 +64,7 @@ def plan_videos(c, limit=3):
         hook = rnd.choice(r["hook"])
         db.x("""INSERT INTO moments(video_id, campaign_id, start_s, end_s, score, category, hook, why, status,
                                     created_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-             v["id"], c["id"], 0.0, min(dur, float(c["max_len"] or 20)), 8.0, r["name"], hook,
+             v["id"], c["id"], 0.0, min(dur, float(c["max_len"] or 20)), float(r.get("score", 9)), r["name"], hook,
              "campaign format: AI reveal", "found", iso(utcnow()))
         db.x("UPDATE videos SET status='analyzed', analyzed_at=? WHERE id=? AND campaign_id=?",
              iso(utcnow()), v["id"], c["id"])

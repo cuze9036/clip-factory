@@ -241,18 +241,21 @@ def check_sources():
     cutoff = utcnow() - dt.timedelta(days=cfg.get("lookback_days", 3))
     min_dur = cfg.get("min_duration_s", 120)
     found = 0
+    from . import recipes
     for c in campaigns.active():
+        # a campaign format builds from short clips (6-13 s AI Lucia clips): keep them, don't skip "too short"
+        fmin = 3 if recipes.get(c) else cfg.get("min_file_duration_s", 15)
         for s in campaigns.sources(c["id"]):
             try:
                 if s["kind"] == "twitch_channel":
                     found += _twitch(c, s, cutoff, min_dur)
                 elif s["kind"] == "folder":
-                    found += _folder(c, s, cfg.get("min_file_duration_s", 15))
+                    found += _folder(c, s, fmin)
                 elif s["kind"] == "gdrive":
                     from . import gdrive
-                    found += gdrive.watch(c, s, cfg.get("min_file_duration_s", 15))
+                    found += gdrive.watch(c, s, fmin)
                 elif s["kind"] == "dropbox":
-                    found += _dropbox(c, s, cfg.get("min_file_duration_s", 15))
+                    found += _dropbox(c, s, fmin)
                 else:
                     found += _youtube(c, s, cutoff, min_dur)
                 db.x("UPDATE sources SET last_checked=? WHERE id=?", iso(utcnow()), s["id"])

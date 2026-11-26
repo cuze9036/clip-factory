@@ -45,7 +45,7 @@ class RecipeTest(unittest.TestCase):
             pipeline.stage_analyze(c)
         ms = db.q("SELECT * FROM moments WHERE campaign_id=?", cid)
         self.assertEqual(len(ms), 2)
-        self.assertTrue(all(m["category"] == "ai_reveal" and m["score"] < 9 for m in ms))   # review first
+        self.assertTrue(all(m["category"] == "ai_reveal" and m["score"] == 9 for m in ms))   # AI check passed → out by itself
         pipeline.stage_download(c, limit=1)
         with mock.patch.object(qa, "check", return_value={"score": 9, "issues": [], "summary": "ok"}):
             pipeline.stage_render(c)

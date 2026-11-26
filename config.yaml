@@ -123,10 +123,16 @@ schedule:
     x:         ["08:30", "10:00", "12:30"]
   slots: ["09:00", "12:30", "16:00", "19:00", "21:30"]   # any other platform
   platform_offset_min: {youtube: 0, tiktok: 60, instagram: 90, facebook: 120, x: 150}   # only with "slots"
-  max_posts_per_account_per_day: 5
-  min_gap_minutes: 120
+  max_posts_per_account_per_day: 8   # all campaigns together, per account
+  min_gap_minutes: 90
   slot_jitter_min: 12             # each post goes out at a random time up to 12 min before/after its slot
   youtube_uploads_per_day: 10     # an upload costs 100 quota units of the default 10,000 a day (Google, 2026)
+
+boost:                            # a running campaign that hasn't earned this much yet makes and posts clips faster
+  enabled: true
+  until_earned_usd: 50
+  daily_clip_quota: 6             # clips a day per campaign while boosting (instead of 2-3)
+  backlog_per_campaign: 12        # clips made ahead while boosting
 
 stats:
   every_hours: 6

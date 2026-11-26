@@ -44,6 +44,8 @@ def flopped(c, days=4):
 def quota(c):
     """Clips a day for this campaign: the normal quota plus one per recent flop (at most double)."""
     base = c.get("daily_clip_quota") or 3
+    if campaigns.boosting(c):   # until it has earned something, post as much as the boost allows
+        base = max(base, config.section("boost").get("daily_clip_quota", 6))
     if not _cfg().get("enabled", True):
         return base
     return base + min(base, len(flopped(c)))

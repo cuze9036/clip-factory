@@ -71,6 +71,11 @@ def deliver(post, clip, caption, campaign_name, _owner_time=None):
                 file_path=clip["final_path"],
                 buttons=[["✅ Posted", f"pp:{post['id']}", "green"], ["❌ Can't post", f"pn:{post['id']}", "grey"]])
     notify.send("poster", caption, campaign_id=post["campaign_id"], post_id=post["id"])
+    from .publish import cta_text
+    cta = cta_text(post["campaign_id"], post["id"])
+    if cta:   # the campaign wants this comment from the account right after posting
+        notify.send("poster", f"💬 Right after posting, comment this from the account (first comment):\n{cta}",
+                    campaign_id=post["campaign_id"], post_id=post["id"])
 
 
 def remind(post, _owner_time=None):
@@ -110,6 +115,29 @@ def cant(post_id, who=""):
     notify.send("manual", f"⚠️ {who or 'Your helper'} couldn't post post {post_id} ({name(p['platform'])}).",
                 campaign_id=p["campaign_id"], post_id=p["id"])
     return f"OK, post {post_id} is skipped. The owner is told."
+
+
+def expire(hours=None):
+    """A clip the helper didn't post within 24 h of its time: its messages leave their channel, the post is skipped."""
+    from .util import parse_iso
+    import datetime as dt
+    hours = hours or cfg().get("expire_hours", 24)
+    gone = 0
+    for p in db.q("""SELECT DISTINCT p.* FROM posts p JOIN outbox o ON o.post_id=p.id AND o.kind='poster'
+                     WHERE p.status IN ('queued','manual') AND p.scheduled_at IS NOT NULL"""):
+        if utcnow() - parse_iso(p["scheduled_at"]) < dt.timedelta(hours=hours):
+            continue
+        ids = [r["message_id"] for r in db.q("SELECT message_id FROM outbox WHERE kind='poster' AND post_id=? "
+                                             "AND message_id IS NOT NULL", p["id"])]
+        if ids:
+            db.kv_set("discord_delete", (db.kv_get("discord_delete") or []) + [["poster", i] for i in ids])
+        db.x("UPDATE outbox SET message_id=NULL, sent_at=COALESCE(sent_at, ?), error='expired' WHERE kind='poster' "
+             "AND post_id=?", iso(utcnow()), p["id"])
+        db.x("UPDATE posts SET status='failed', error=? WHERE id=?", f"skipped: not posted within {hours} h", p["id"])
+        db.log(p["campaign_id"], f"Post {p['id']} ({p['platform']}) wasn't posted within {hours} h: removed from the "
+               "helper's channel")
+        gone += 1
+    return gone
 
 
 def post_for_message(message_id):

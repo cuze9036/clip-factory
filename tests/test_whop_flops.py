@@ -98,7 +98,8 @@ class LaneTest(unittest.TestCase):
         self._clip(views=5000)            # a good one
         self._clip(views=10, hours_ago=5)  # too new to judge
         self.assertEqual(flops.flopped(self.c()), [flop])
-        self.assertEqual(flops.quota(self.c()), (self.c()["daily_clip_quota"] or 3) + 1)
+        with mock.patch("clipfactory.campaigns.boosting", return_value=False):   # not the $50 boost here
+            self.assertEqual(flops.quota(self.c()), (self.c()["daily_clip_quota"] or 3) + 1)
         with mock.patch.object(notify, "send") as sent:
             flops.run()
             flops.run()                    # the same flop is handled once

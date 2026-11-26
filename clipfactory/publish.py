@@ -426,6 +426,8 @@ def run_due():
     run_manual()
     submit_nudges()
     expire_submits()
+    from . import poster
+    poster.expire()
     done = 0
     for post in due_posts():
         clip = db.one("SELECT * FROM clips WHERE id=?", post["clip_id"])
@@ -444,6 +446,8 @@ def run_due():
                  "uploaded" if uploaded_early else "posted", ext_id, url, post["scheduled_at"], post["id"])
             if post["platform"] == "youtube":
                 db.kv_set(key, n + 1)
+            if post["platform"] in ("instagram", "facebook") and not uploaded_early:
+                comment_cta(post, ext_id)
             if not uploaded_early:
                 submit_reminder(post["id"])
             db.log(post["campaign_id"], f"{post['platform'].title()} {'scheduled' if uploaded_early else 'posted'}: {url}")
@@ -483,6 +487,30 @@ def reel_number(p):
                   p["campaign_id"], p["platform"], p["posted_at"], p["posted_at"], p["id"])["n"] or 1
 
 
+def cta_text(campaign_id, post_id=0):
+    """The comment the campaign wants under every post (its guide's examples), or ""."""
+    from . import campaigns
+    c = campaigns.get(campaign_id)
+    lines = (campaigns._extra(c).get("comment_cta") or []) if c else []
+    return lines[post_id % len(lines)] if lines else ""
+
+
+def comment_cta(post, media_id):
+    """Instagram / Facebook: write the campaign's comment under the post from your account (you pin it)."""
+    text = cta_text(post["campaign_id"], post["id"])
+    if not text:
+        return False
+    try:
+        _, token = meta_keys(post["platform"], post["account"] or "main")
+        _g("POST", _graph(f"{media_id}/comments"), token, data={"message": text}, timeout=30)
+        db.kv_set(f"commented:{post['id']}", True)
+        return True
+    except Exception as e:
+        db.log(post["campaign_id"], f"Couldn't comment under post {post['id']} ({str(e)[:120]}): comment it yourself",
+               "warn")
+        return False
+
+
 def submit_reminder(post_id):
     """Right after a clip goes live: one short message (campaign, reel number, deadline, Submitted button) and,
     on its own, the link, so a long-press copies only the link."""
@@ -496,6 +524,11 @@ def submit_reminder(post_id):
             f"{NAMES.get(p['platform'], p['platform'].title())} {kind} {reel_number(p)} · submit by {deadline}\n"
             f"Copy the link below → Whop: {('<' + p['campaign_url'] + '>') if p['campaign_url'] else 'the campaign page'}"
             "\nSubmitted it? Tap ✅ Done.")
+    cta = cta_text(p["campaign_id"], post_id)
+    if cta:   # the campaign wants this comment under the post (pinned on Instagram)
+        head += ("\n💬 The comment is posted under it: **pin it**." if db.kv_get(f"commented:{post_id}") else
+                 "\n💬 Comment this under the post" + (" and pin it" if p["platform"] == "instagram" else "")
+                 + f": {cta}")
     notify.send("submit", head, campaign_id=p["campaign_id"], post_id=post_id,
                 buttons=[["✅ Done", f"sub:{post_id}", "green"]])
     notify.send("submit", p["url"], campaign_id=p["campaign_id"], post_id=post_id)

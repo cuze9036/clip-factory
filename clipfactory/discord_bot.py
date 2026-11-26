@@ -312,7 +312,8 @@ class Bot(discord.Client):
             return
         await asyncio.to_thread(db.kv_set, "discord_delete", None)
         for where, mid in todo:
-            chan = self.get_channel(self.submit_id or self.channel_id)
+            chan = self.get_channel(self.poster_id if where == "poster" and self.poster_id else
+                                    self.submit_id or self.channel_id)
             try:
                 msg = await chan.fetch_message(int(mid))
                 await msg.delete()

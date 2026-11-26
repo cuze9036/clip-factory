@@ -45,7 +45,11 @@ def stage_analyze(c, limit=1):
 def stage_download(c, limit=2):
     waiting = db.one("""SELECT COUNT(*) n FROM clips WHERE campaign_id=?
                         AND status IN ('downloaded','rendered','pending_review')""", c["id"])["n"]
-    room = config.section("download").get("backlog_per_campaign", 6) - waiting
+    backlog = config.section("download").get("backlog_per_campaign", 6)
+    if campaigns.boosting(c):
+        backlog = max(backlog, config.section("boost").get("backlog_per_campaign", 12))
+        limit = max(limit, 4)
+    room = backlog - waiting
     for m in db.q("SELECT * FROM moments WHERE campaign_id=? AND status='found' ORDER BY score DESC, id LIMIT ?",
                   c["id"], max(0, min(limit, room))):
         v = db.one("SELECT * FROM videos WHERE id=? AND campaign_id=?", m["video_id"], c["id"])
@@ -263,9 +267,10 @@ def run_once():
             _keep_up(c)
         except Exception as e:
             db.log(c["id"], f"Campaign upkeep failed: {str(e)[:200]}", "warn")
-        for stage in (stage_analyze, stage_download, stage_render, stage_metadata):
+        fast = campaigns.boosting(c)
+        for stage, n in ((stage_analyze, 2), (stage_download, 4), (stage_render, 3), (stage_metadata, 4)):
             try:
-                stage(c)
+                stage(c, limit=n) if fast else stage(c)
             except Exception:
                 db.log(c["id"], f"{stage.__name__} crashed: {traceback.format_exc(limit=2)}", "error")
     for fn in (publish.run_due,):

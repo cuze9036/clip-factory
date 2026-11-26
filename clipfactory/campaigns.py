@@ -431,6 +431,17 @@ def extract_from_brief(text):
 
 # ---------- stats ----------
 
+def earned(c):
+    posts = db.q("SELECT views FROM posts WHERE campaign_id=? AND status IN ('posted','uploaded')", c["id"])
+    return round(sum(post_earning(c, p["views"] or 0) for p in posts), 2)
+
+
+def boosting(c):
+    """A running campaign that hasn't earned `boost.until_earned_usd` yet makes and posts clips faster."""
+    b = config.section("boost")
+    return bool(b.get("enabled", True)) and lane_state(c) == "running" and earned(c) < b.get("until_earned_usd", 50)
+
+
 def post_earning(c, views):
     if views < (c["min_views"] or 0) or not c["rate_per_1k"]:
         return 0.0

@@ -21,6 +21,10 @@ def stage_analyze(c, limit=1):
         return
     if not check.ready(c):   # read the whole campaign first; only then watch its videos
         return
+    from . import recipes
+    if recipes.get(c):   # a campaign format built from its own clips: every footage clip is one clip to build
+        recipes.plan_videos(c, limit=max(limit, 3))
+        return
     for v in db.q("SELECT * FROM videos WHERE campaign_id=? AND status='new' ORDER BY created_at LIMIT ?", c["id"], limit):
         db.x("UPDATE videos SET status='analyzing' WHERE id=? AND campaign_id=?", v["id"], c["id"])
         try:
@@ -148,6 +152,10 @@ def stage_render(c, limit=1):
     for clip in db.q("SELECT * FROM clips WHERE campaign_id=? AND status='downloaded' ORDER BY id LIMIT ?", c["id"], limit):
         m = db.one("SELECT * FROM moments WHERE id=?", clip["moment_id"])
         v = db.one("SELECT * FROM videos WHERE id=? AND campaign_id=?", m["video_id"], c["id"])
+        from . import recipes
+        if recipes.get(c):
+            render_recipe(c, clip, m)
+            continue
         try:
             download.even_streams(clip["raw_path"])   # picture and sound the same length (no frozen ending)
             lang = (v or {}).get("language")
@@ -179,6 +187,25 @@ def stage_render(c, limit=1):
             db.log(c["id"], f"Render failed for clip {clip['id']}: {e}", "error")
             continue
         check_clip(c, {**clip, "style": style}, res, captions)
+
+
+def render_recipe(c, clip, m):
+    """A campaign format (recipes.py): built from the campaign's clips + its end card; the AI check only reports."""
+    from . import qa, recipes
+    r = recipes.get(c)
+    try:
+        res = recipes.render_clip(c, clip, m)
+        db.x("UPDATE clips SET final_path=?, duration_s=?, words='[]', style=?, plan=?, status='rendered' WHERE id=?",
+             res["path"], res["duration"], r["name"], json.dumps(res["plan"], ensure_ascii=False), clip["id"])
+    except Exception as e:
+        db.x("UPDATE clips SET status='failed', error=? WHERE id=?", str(e)[:500], clip["id"])
+        db.log(c["id"], f"Render failed for clip {clip['id']}: {e}", "error")
+        return
+    if config.section("qa").get("enabled", True):
+        try:
+            qa.store(clip["id"], qa.check(res["path"], res["duration"], c, r["name"], False, res["plan"], ""))
+        except Exception as e:
+            db.log(c["id"], f"AI check of clip {clip['id']} skipped: {str(e)[:150]}", "warn")
 
 
 def check_clip(c, clip, res, captions):

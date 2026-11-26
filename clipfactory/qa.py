@@ -59,6 +59,11 @@ def _validate(d):
 
 
 def added_text(style, captions, plan, credit):
+    if (plan or {}).get("recipe"):   # a campaign format: its own lines, a GTA-style HUD, the brand's end card
+        ln = plan.get("lines") or {}
+        return (f"the campaign's format: hook \"{ln.get('hook', '')}\" with a game HUD (money, stars, minimap) "
+                f"over the first seconds, then \"{ln.get('reveal', '')}\", then \"{ln.get('cta', '')}\"; the "
+                "brand's end card (logo + website) blended over the last 3 seconds. No speech captions.")
     parts = [f"edit style {style}"]
     parts.append("animated captions of the speech" if captions else "no captions (the footage has its own)")
     if (plan or {}).get("hook"):

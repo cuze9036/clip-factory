@@ -30,7 +30,7 @@ CANT_OPEN = re.compile(r"https?://(?:[\w-]+\.)*(mega\.nz|wetransfer\.com|we\.tl|
                        r"onedrive\.live\.com|1drv\.ms|sharepoint\.com|icloud\.com|"
                        r"terabox\.com|pcloud\.com|drop\.download|gofile\.io)/\S*", re.I)
 # Folders / files a campaign gives you to put INTO your clips (end card, logo, examples to copy), not to clip from.
-ASSET = re.compile(r"example|end ?card|outro|intro|logo|watermark|headline|thumbnail|overlay|template|tutorial|"
+ASSET = re.compile(r"example|end[ _-]?card|outro|intro|logo|watermark|headline|thumbnail|overlay|template|tutorial|"
                    r"how ?to|music|sound|font|cta", re.I)
 LINK = re.compile(r"https?://[^\s<>\"')\]]+")
 VIDEO_EXT = (".mp4", ".mov", ".mkv", ".webm", ".m4v")

@@ -417,6 +417,7 @@ def night_post(post):
 def run_due():
     run_manual()
     submit_nudges()
+    expire_submits()
     done = 0
     for post in due_posts():
         clip = db.one("SELECT * FROM clips WHERE id=?", post["clip_id"])
@@ -491,6 +492,29 @@ def submit_reminder(post_id):
                 buttons=[["✅ Done", f"sub:{post_id}", "green"]])
     notify.send("submit", p["url"], campaign_id=p["campaign_id"], post_id=post_id)
     db.kv_set(f"submit_ping:{post_id}", iso(utcnow()))
+
+
+def expire_submits():
+    """A campaign clip not marked ✅ Done within the submit window (30 min from its first "Submit now"): its
+    messages leave #clip-submission, so the channel only ever shows what can still be submitted."""
+    minutes = config.section("submit").get("within_minutes", 30)
+    cutoff = iso(utcnow() - dt.timedelta(minutes=minutes))
+    gone = 0
+    for p in db.q("""SELECT o.post_id, MIN(o.created_at) first FROM outbox o JOIN posts p ON p.id=o.post_id
+                     WHERE o.kind='submit' AND p.submitted=0 AND (o.message_id IS NOT NULL OR o.sent_at IS NULL)
+                     GROUP BY o.post_id HAVING MIN(o.created_at) < ?""", cutoff):
+        rows = db.q("SELECT id, message_id FROM outbox WHERE kind='submit' AND post_id=? "
+                    "AND (message_id IS NOT NULL OR sent_at IS NULL)", p["post_id"])
+        ids = [r["message_id"] for r in rows if r["message_id"]]
+        if ids:   # the Discord bot deletes them
+            db.kv_set("discord_delete", (db.kv_get("discord_delete") or []) + [["submit", i] for i in ids])
+        for r in rows:   # never sent ones are dropped too
+            db.x("UPDATE outbox SET message_id=NULL, sent_at=COALESCE(sent_at, ?), error='expired' WHERE id=?",
+                 iso(utcnow()), r["id"])
+        db.x("DELETE FROM kv WHERE k=?", f"submit_ping:{p['post_id']}")
+        db.log(None, f"Post {p['post_id']}: not marked Done within {minutes} min, so its submit message was removed")
+        gone += 1
+    return gone
 
 
 def submit_nudges():

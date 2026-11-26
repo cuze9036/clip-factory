@@ -307,6 +307,21 @@ class Bot(discord.Client):
             except (discord.HTTPException, AttributeError, ValueError):
                 pass   # already gone, or it was posted in another channel
 
+    async def read_shots(self, message, shots, note):
+        """Screenshots of TikTok / X (or any platform's) numbers: the AI reads them for the daily study."""
+        from . import study
+        day = study.folder() / "screens" / datetime.date.today().isoformat()
+        day.mkdir(parents=True, exist_ok=True)
+        async with message.channel.typing():
+            for i, a in enumerate(shots[:10]):
+                path = day / f"{message.id}_{i}{os.path.splitext(a.filename or '.png')[1] or '.png'}"
+                await a.save(path)
+                try:
+                    reply = await asyncio.to_thread(study.read_screenshot, path, note)
+                except Exception as e:
+                    reply = f"📸 Couldn't read that screenshot ({str(e)[:120]}). Send it again a bit later."
+                await message.channel.send(reply[:1900])
+
     def _allowed(self, user_id, channel_id):
         return user_id == self.owner_id and (channel_id in (self.channel_id, self.insights_id, self.submit_id,
                                                             self.done_id)
@@ -319,6 +334,11 @@ class Bot(discord.Client):
         if message.author.bot or not self._allowed(message.author.id, message.channel.id):
             return
         text = await full_text(message)
+        shots = [a for a in message.attachments if (a.content_type or "").startswith("image/")
+                 or (a.filename or "").lower().endswith((".png", ".jpg", ".jpeg", ".webp"))]
+        if shots and message.channel.id == self.insights_id and not text.startswith(("!", "/")):
+            await self.read_shots(message, shots, text)   # TikTok / X numbers for the daily study
+            return
         if not text.startswith(("!", "/")):
             from . import joinflow
             cid = await asyncio.to_thread(joinflow.awaiting)

@@ -90,7 +90,12 @@ def _gemini(p, prompt, video):
     client = _clients.get(p["name"]) or genai.Client(api_key=p["api_key"])
     _clients[p["name"]] = client
     parts = []
-    if video:
+    if video and video.get("image"):   # a screenshot: Gemini reads the picture
+        import mimetypes
+        with open(video["image"], "rb") as f:
+            parts.append(types.Part.from_bytes(data=f.read(),
+                                               mime_type=mimetypes.guess_type(video["image"])[0] or "image/png"))
+    elif video:
         meta = {"start_offset": f"{int(video['start'])}s", "end_offset": f"{int(video['end'])}s"}
         if video.get("fps"):
             meta["fps"] = video["fps"]
@@ -103,7 +108,7 @@ def _gemini(p, prompt, video):
     parts.append(types.Part(text=prompt))
     cfg = types.GenerateContentConfig(
         response_mime_type="application/json", temperature=0.4,
-        media_resolution=(None if not video else types.MediaResolution.MEDIA_RESOLUTION_MEDIUM if video.get("detail")
+        media_resolution=(None if not video or video.get("image") else types.MediaResolution.MEDIA_RESOLUTION_MEDIUM if video.get("detail")
                           else types.MediaResolution.MEDIA_RESOLUTION_LOW),   # "detail": small text must be readable
     )
     r = client.models.generate_content(model=p["model"], contents=types.Content(role="user", parts=parts), config=cfg)
@@ -337,4 +342,6 @@ def rules_block(campaign):
     rules = list(campaign.get("rules") or []) + guide.lines(campaign)
     block = ("\n\nCampaign rules and guide from the creator (follow them):\n" + "\n".join(f"- {r}" for r in rules)
              if rules else "")
-    return block + insights.tips_block()   # what the weekly review learned from our own views
+    from . import study
+    # what the weekly review and the daily study learned from our own views
+    return block + insights.tips_block() + study.block()

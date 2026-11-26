@@ -14,7 +14,7 @@ HELP = """**Clip Factory commands**
 `!campaign <paste the whole campaign page>` AI reads it and suggests a lane · `!campaign <whop campaign link>` the bot reads the page itself (no login; if Whop hides it, paste it)
 `!guide [campaign] [text]` the campaign's instructions the AI follows; paste reference material to add it
 `!page` what the bot saw on the last campaign page it opened · `!fit [campaign]` the campaign check: can the tool do this campaign, account rules, your to-do (runs again with `!fit <campaign> again`)
-`!captions <campaign> auto|on|off` our captions on that campaign's clips · `!queue` what goes out next, where and when · `!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week)
+`!captions <campaign> auto|on|off` our captions on that campaign's clips · `!queue` what goes out next, where and when · `!reedit <clip> [what to change]` make a clip again your way · `!remake all` redo every clip that isn't live yet · `!ai` which AI did the work · `!fix` fix what it can now · `!check` problems right now · `!insights` this week's review (also sent by itself every week) · `!study` what our clips taught us (daily, by itself) · `!study help` how to send TikTok/X screenshots
 `!board` refresh #campaign-updates and #active-campaigns now · `!suggested` campaigns the finder found · `!cleanup` remove duplicate suggestions
 `!campaigns` · `!activate <id>` · `!ignore <id>` · `!pause <id>` · `!resume <id>`
 `!source <campaign id> <YouTube/Twitch channel, folder or video link>` tell a campaign where its content is
@@ -54,6 +54,7 @@ SLASH = {
     "fix": ("Fix what it can right now (retries, Telegram fallback) and explain errors", None),
     "check": ("Daily check now: problems and what to do", None),
     "insights": ("This week's review: what works, what doesn't, what to change", None),
+    "study": ("What our clips taught us (daily study); type help for TikTok/X screenshots", "help (optional)"),
     "emails": ("Google audit emails from the last 7 days", None),
     "campaigns": ("Every campaign and its state", None),
     "selftest": ("Check every part of the tool (1-5 min)", None),
@@ -495,6 +496,11 @@ def handle(text):
         if cmd == "!check":
             from . import health
             return health.report()
+        if cmd == "!study":
+            from . import study
+            if rest.strip().lower().startswith("help"):
+                return study.SHOT_HELP
+            return study.run(send=False)
         if cmd == "!insights":
             from . import insights
             return insights.run(send=False)

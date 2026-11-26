@@ -177,6 +177,13 @@ insights:                         # weekly self-review with the free AI (Gemini 
   autofix_max_tries: 2            # each failed item is retried at most this many times
   min_posts: 5                    # posts with views needed before it gives advice or changes anything
 
+study:                            # daily study (clipfactory/study.py): learns from every clip's views
+  enabled: true
+  every_hours: 24
+  min_clips: 3                    # clips with views needed before it writes lessons
+  max_clips: 120                  # newest posted clips it looks at
+  detail_videos: 40               # YouTube clips it reads drop-off and traffic sources for
+
 gmail_watch:                      # reads Google's YouTube API audit emails (read-only) and posts them to Discord
   enabled: true                   # does nothing until you run: clipfactory auth-gmail main
   account: main

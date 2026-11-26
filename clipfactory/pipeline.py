@@ -283,6 +283,14 @@ def run_once():
                 insights.run()
             except Exception as e:
                 db.log(None, f"Weekly review failed: {str(e)[:200]}", "warn")
+    st = config.section("study")
+    if st.get("enabled", True) and _due("study_last_run", st.get("every_hours", 24) * 60):
+        try:
+            from . import study
+            study.run()   # learns from every clip's views each day (data/learning/)
+        except Exception as e:
+            db.kv_set("study_last_run", iso(utcnow()))
+            db.log(None, f"Daily study failed: {str(e)[:200]}", "warn")
     if _due("discovery_last_run", config.section("discovery").get("every_hours", 6) * 60):
         discovery.run()
 

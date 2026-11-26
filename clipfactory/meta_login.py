@@ -12,9 +12,10 @@ import requests
 from . import config
 
 NEEDED = ["instagram_basic", "instagram_content_publish", "instagram_manage_insights", "pages_show_list",
-          "pages_read_engagement", "pages_manage_posts", "publish_video", "business_management"]
+          "pages_read_engagement", "pages_manage_posts", "read_insights", "publish_video", "business_management"]
+# posting needs the first five; reading views (daily study, flops) needs the two insights ones
 MUST = {"instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement",
-        "pages_manage_posts"}
+        "pages_manage_posts", "instagram_manage_insights", "read_insights"}
 
 
 def _graph(path):

@@ -21,7 +21,8 @@ def fake_get(url, params=None, headers=None, timeout=None):
     if url.endswith("debug_token"):
         return R({"data": {"is_valid": True, "app_id": 42, "expires_at": 123,
                            "scopes": ["instagram_basic", "instagram_content_publish", "pages_show_list",
-                                      "pages_read_engagement", "pages_manage_posts"]}})
+                                      "pages_read_engagement", "pages_manage_posts", "instagram_manage_insights",
+                                      "read_insights"]}})
     if url.endswith("me/accounts"):
         assert headers["Authorization"] == "Bearer LONG"
         return R({"data": [{"id": "1", "name": "Other page", "access_token": "P1"},

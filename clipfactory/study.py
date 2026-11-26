@@ -149,6 +149,14 @@ def meta_details(clip):
                 got.update(ask([m]))
             except RuntimeError:
                 pass
+    if not got and clip["platform"] == "instagram":   # no insights permission: likes and comments still show
+        try:
+            m = publish._g("GET", publish._graph(clip["external_id"]), token,
+                           params={"fields": "like_count,comments_count"}, timeout=30)
+            got = {"likes": m.get("like_count"), "comments": m.get("comments_count"),
+                   "note": "views need instagram_manage_insights (run windows\\meta-login.ps1 again)"}
+        except RuntimeError as e:
+            got = {"detail_error": str(e)[:80]}
     for k in ("ig_reels_avg_watch_time", "post_video_avg_time_watched"):
         if k in got:
             got["avg_watch_s"] = round(got.pop(k) / 1000, 1)

@@ -41,7 +41,7 @@ STEP 4 - Instagram and Facebook (about 30 minutes, optional at first)
   2. Create a Facebook Page and link the Instagram account to it
   3. developers.facebook.com > Create app (Business) > add Instagram
   4. On the laptop run:  powershell -ExecutionPolicy Bypass -File windows\meta-login.ps1
-     It tells you what to tick in Graph API Explorer; paste the ONE token it asks for (and the App Secret
+     It tells you what to tick in Graph API Explorer (include instagram_manage_insights and read_insights, or views cannot be read); paste the ONE token it asks for (and the App Secret
      once, from App settings > Basic). It finds your Page and Instagram account, saves all four keys and
      checks them. Nothing else to copy.
   5. If Meta ever refuses the keys again (you get a note in #ai-insights), run step 4 again

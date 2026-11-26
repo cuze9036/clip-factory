@@ -55,7 +55,7 @@ STEP 5 - Tool ko batao (1 min)
 
 STEP 6 - Check karo
   - #to-post channel mein bot ek message bhejega: "👋 How this channel works" (helper ke liye steps).
-  - Agli TikTok / X clip wahan aayegi: upar video + time (India), neeche caption, aur ✅ Posted / ❌ Can't post.
+  - Agli TikTok / X clip wahan aayegi: upar video + time (Pakistan ka time), neeche caption, aur ✅ Posted / ❌ Can't post.
 
 
 Helper ko kya karna hai (bot khud bhi channel mein batata hai):

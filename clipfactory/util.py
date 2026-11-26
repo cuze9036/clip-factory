@@ -17,9 +17,15 @@ def own_tz():
         return ET
 
 
-def own_time(t, now=None, day=True):
-    """'today 8:30 PM', 'tomorrow 6:30 AM' or 'Thu 27 Nov, 8:30 AM' in the owner's time (one time, no ET)."""
-    tz = own_tz()
+def own_time(t, now=None, day=True, tz=None):
+    """'today 8:30 PM', 'tomorrow 6:30 AM' or 'Thu 27 Nov, 8:30 AM' in the owner's time (one time, no ET), or in
+    another zone (`tz`, a name like "Asia/Karachi")."""
+    if isinstance(tz, str):
+        try:
+            tz = ZoneInfo(tz)
+        except Exception:
+            tz = None
+    tz = tz or own_tz()
     t = t.astimezone(tz)
     clock = f"{t.hour % 12 or 12}:{t:%M %p}"
     if not day:

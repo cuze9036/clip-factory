@@ -19,7 +19,7 @@ LINK = {"tiktok": re.compile(r"https?://(?:www\.|vm\.|vt\.|m\.)?tiktok\.com/\S+"
         "facebook": re.compile(r"https?://(?:www\.|m\.)?(?:facebook\.com|fb\.watch)/\S+", re.I),
         "youtube": re.compile(r"https?://(?:www\.)?(?:youtube\.com|youtu\.be)/\S+", re.I)}
 HELP = ("👋 **How this channel works**\n"
-        "1. A video arrives here with the platform and the time to post it (India time), then its caption.\n"
+        "1. A video arrives here with the platform and the time to post it ({zone} time), then its caption.\n"
         "2. Post the video on that platform at that time, with that caption (copy it exactly).\n"
         "3. Tap **✅ Posted** under the video and paste the link of your post. (Or reply to the video with the link.)\n"
         "4. Can't post it? Tap **❌ Can't post**.\n"
@@ -51,19 +51,32 @@ def may_use(user_id, owner_id):
     return user_id == owner_id or not hs or user_id in hs
 
 
-def deliver(post, clip, caption, campaign_name, when):
+def zone():
+    """The helper's time zone (poster.timezone, Pakistan by default) and its plain name."""
+    tz = cfg().get("timezone") or "Asia/Karachi"
+    return tz, {"Asia/Karachi": "Pakistan", "Asia/Kolkata": "India"}.get(tz, tz.split("/")[-1].replace("_", " "))
+
+
+def when(post):
+    """The posting time on the helper's clock (posts are still planned for US viewers)."""
+    from .util import own_time, parse_iso
+    return own_time(parse_iso(post["scheduled_at"]), tz=zone()[0])
+
+
+def deliver(post, clip, caption, campaign_name, _owner_time=None):
     from .publish import name
     notify.send("poster", f"🎬 **{name(post['platform'])} · post {post['id']}** · {campaign_name}\n"
-                f"Post at **{when}** (India time), with the caption below.",
+                f"Post at **{when(post)}** ({zone()[1]} time), with the caption below.",
                 campaign_id=post["campaign_id"], clip_id=post["clip_id"], post_id=post["id"],
                 file_path=clip["final_path"],
                 buttons=[["✅ Posted", f"pp:{post['id']}", "green"], ["❌ Can't post", f"pn:{post['id']}", "grey"]])
     notify.send("poster", caption, campaign_id=post["campaign_id"], post_id=post["id"])
 
 
-def remind(post, when):
+def remind(post, _owner_time=None):
     from .publish import name
-    notify.send("poster", f"⏰ **Post {post['id']} on {name(post['platform'])} is due now** ({when}). Post it, then tap "
+    notify.send("poster", f"⏰ **Post {post['id']} on {name(post['platform'])} is due now** ({when(post)}, "
+                f"{zone()[1]} time). Post it, then tap "
                 "✅ Posted on its video and paste the link.", campaign_id=post["campaign_id"], post_id=post["id"])
 
 
@@ -130,7 +143,7 @@ def share_copy(path, max_bytes):
 def help_once():
     if channel_id() and not db.kv_get(f"poster_help:{channel_id()}"):
         db.kv_set(f"poster_help:{channel_id()}", iso(utcnow()))
-        notify.send("poster", HELP)
+        notify.send("poster", HELP.format(zone=zone()[1]))
 
 
 def setup(ask=input):

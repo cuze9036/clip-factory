@@ -172,6 +172,7 @@ poster:                           # a helper posts the TikTok / X clips for you 
   channel_id: ""                  # set it in config.local.yaml: that channel's ID (it can be in another server)
   helper_ids: []                  # Discord user IDs who may press ✅ Posted there (empty = anyone in that channel)
   platforms: [tiktok, x]          # these go to that channel instead of Telegram
+  timezone: Asia/Karachi          # times shown in that channel (the helper's clock); posts stay at US slots
 
 insights:                         # weekly self-review with the free AI (Gemini / Free LLM API)
   enabled: true

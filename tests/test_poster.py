@@ -51,6 +51,12 @@ class PosterTest(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(__import__("json").loads(rows[0]["buttons"])[0][:2], ["✅ Posted", f"pp:{pid}"])
         self.assertTrue(rows[0]["file_path"].endswith("final.mp4"))
+        self.assertIn("(Pakistan time)", rows[0]["text"])                          # the helper's clock
+        from clipfactory import poster
+        from clipfactory.util import parse_iso
+        from zoneinfo import ZoneInfo
+        t = parse_iso(db.one("SELECT scheduled_at FROM posts WHERE id=?", pid)["scheduled_at"]).astimezone(ZoneInfo("Asia/Karachi"))
+        self.assertIn(f"{t.hour % 12 or 12}:{t:%M %p}", poster.when(db.one("SELECT * FROM posts WHERE id=?", pid)))
         self.assertEqual(rows[1]["text"], "she's AI #gta6")                       # the caption alone, easy to copy
         self.assertTrue(db.one("SELECT delivered_at FROM posts WHERE id=?", pid)["delivered_at"])
 

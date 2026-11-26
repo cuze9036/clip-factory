@@ -100,6 +100,46 @@ class DeepLinksTest(unittest.TestCase):
         self.assertTrue(webpage.worth_opening("https://other.test/media-kit", None, 3))
         self.assertFalse(webpage.worth_opening("https://other.test/blog/post", "https://brand.example/", 3))
 
+    def test_notion_database_rows_are_the_next_level(self):
+        from clipfactory import notion
+        db_block = {"id": "cv", "type": "collection_view", "collection_id": "col", "view_ids": ["view"],
+                    "space_id": "sp"}
+
+        def post(endpoint, body):
+            self.assertEqual(endpoint, "queryCollection")
+            return {"result": {"reducerResults": {"collection_group_results": {"blockIds": ["r1", "r2"]}}},
+                    "recordMap": {"block": {**block("r1", "page", [["RULES "]]), **block("r2", "page", [["Formats"]])}}}
+        with mock.patch.object(notion, "_post", side_effect=post):
+            self.assertEqual(notion._rows(db_block), [("r1", "RULES"), ("r2", "Formats")])
+
+    def test_end_card_and_example_folders_are_assets_not_footage(self):
+        from clipfactory import campaigns, gdrive, joinflow, llm
+
+        class D:
+            ready = True
+            names = {"F1aaaaaaaaaaaa": "AI Lucia clips", "F2aaaaaaaaaaaa": "End card + NY Post headline",
+                     "F3aaaaaaaaaaaa": "Format example videos"}
+
+            def meta(self, fid):
+                return {"id": fid, "name": self.names[fid], "mimeType": "application/vnd.google-apps.folder"}
+
+            def children(self, fid):
+                return [{"id": fid + "v", "name": "a.mp4", "mimeType": "video/mp4", "size": "5"}]
+
+            def text(self, item):
+                return ""
+        cid = campaigns.suggest({"name": "Lucia", "platforms": ["instagram"], "rate_per_1k": 1.5}, "pasted")
+        joinflow.joined(cid)
+        with mock.patch.object(gdrive, "LINK", gdrive.LINK), \
+                mock.patch.object(llm, "complete_json", return_value=({"do": [], "avoid": []}, "fake")):
+            for f in D.names:
+                out = gdrive.explore(cid, f"https://drive.google.com/drive/folders/{f}", drive=D())
+        srcs = {s["channel_id"] for s in campaigns.sources(cid)}
+        self.assertEqual(srcs, {"folder:F1aaaaaaaaaaaa"})                          # only the clips to cut from
+        self.assertEqual(set(campaigns._extra(campaigns.get(cid))["assets"]),
+                         {"End card + NY Post headline", "Format example videos"})
+        self.assertIn("🧩 Assets", out)
+
 
 if __name__ == "__main__":
     unittest.main()

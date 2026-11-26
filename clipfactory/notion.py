@@ -81,6 +81,29 @@ def _blocks(pid):
     return blocks
 
 
+def _rows(block, limit=60):
+    """[(row page id, title)] of a Notion database shown on the page (its first view)."""
+    cid = block.get("collection_id") or ((block.get("format") or {}).get("collection_pointer") or {}).get("id")
+    views = block.get("view_ids") or []
+    if not cid or not views:
+        return []
+    space = block.get("space_id") or ""
+    try:
+        data = _post("queryCollection", {
+            "collection": {"id": cid, "spaceId": space}, "collectionView": {"id": views[0], "spaceId": space},
+            "loader": {"type": "reducer", "reducers": {"collection_group_results": {"type": "results", "limit": limit}},
+                       "searchQuery": "", "userTimeZone": "UTC"}})
+    except Exception:
+        return []
+    ids = (((data.get("result") or {}).get("reducerResults") or {}).get("collection_group_results") or {}).get("blockIds")
+    rec = (data.get("recordMap") or {}).get("block") or {}
+    out = []
+    for rid in ids or []:
+        v = _value(rec.get(rid))
+        out.append((rid, _rich((v.get("properties") or {}).get("title"), []).strip() or "row"))
+    return out
+
+
 def _rich(prop, links):
     """Notion rich text → plain text; links and page mentions are collected."""
     out = []
@@ -163,8 +186,14 @@ def read(url, max_chars=40000):
                 lines.append(f"{indent}[{t}] {cap + ': ' if cap else ''}{src}")
             elif cap:
                 lines.append(f"{indent}[{t}] {cap}")
-        elif t in ("collection_view", "collection_view_page"):
-            lines.append(f"{indent}[a Notion database: open it on Notion if its rows matter]")
+        elif t in ("collection_view", "collection_view_page"):   # a database: each row is a page (next level)
+            rows = _rows(b)
+            if rows:
+                for rid, name in rows:
+                    lines.append(f"{indent}📄 {name}: {page_url(rid)}")
+                    links.append(page_url(rid))
+            else:
+                lines.append(f"{indent}[a Notion database I couldn't list]")
         elif t == "table_row":
             cells = [_rich(v, links) for v in props.values()]
             lines.append(indent + " | ".join(c for c in cells if c))

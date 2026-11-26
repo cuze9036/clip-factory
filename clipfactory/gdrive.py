@@ -29,6 +29,9 @@ DOC = re.compile(r"docs\.google\.com/(document|presentation|spreadsheets)/(?:u/\
 CANT_OPEN = re.compile(r"https?://(?:[\w-]+\.)*(mega\.nz|wetransfer\.com|we\.tl|mediafire\.com|frame\.io|box\.com|"
                        r"onedrive\.live\.com|1drv\.ms|sharepoint\.com|icloud\.com|"
                        r"terabox\.com|pcloud\.com|drop\.download|gofile\.io)/\S*", re.I)
+# Folders / files a campaign gives you to put INTO your clips (end card, logo, examples to copy), not to clip from.
+ASSET = re.compile(r"example|end ?card|outro|intro|logo|watermark|headline|thumbnail|overlay|template|tutorial|"
+                   r"how ?to|music|sound|font|cta", re.I)
 LINK = re.compile(r"https?://[^\s<>\"')\]]+")
 VIDEO_EXT = (".mp4", ".mov", ".mkv", ".webm", ".m4v")
 DOC_TYPES = {"application/vnd.google-apps.document": "text/plain",
@@ -193,7 +196,7 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
     queue, seen = [(link.strip().strip("<>"), 0)], set()
     folders, files, texts, other, problems, needs_login = {}, {}, [], [], [], False
     blocked = []   # (link, what to do): links the bot can't open, explained simply
-    parents, read_pages, notion_videos = {}, [], []
+    parents, read_pages, notion_videos, assets = {}, [], [], {}
     count = web = 0
 
     def take_links(text, depth, parent=None, more=()):
@@ -229,7 +232,9 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
                 except Exception:
                     name = fid
                 videos = [k for k in kids if is_video(k)]
-                if videos:
+                if videos and ASSET.search(name):   # an end card / examples folder: kept, never clipped
+                    assets[name] = f"https://drive.google.com/drive/folders/{fid}"
+                elif videos:
                     folders[fid] = {"name": name, "videos": len(videos)}
                 for k in kids:
                     if is_folder(k):
@@ -253,7 +258,9 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
                     take_links(t, depth)
             elif FILE.search(url):
                 item = drive.meta(FILE.search(url).group(1))
-                if is_video(item):
+                if is_video(item) and ASSET.search(item.get("name") or ""):
+                    assets[item.get("name")] = f"https://drive.google.com/file/d/{item['id']}/view"
+                elif is_video(item):
                     files[item["id"]] = item.get("name", item["id"])
                 elif is_folder(item):
                     queue.append((f"https://drive.google.com/drive/folders/{item['id']}", depth))
@@ -267,7 +274,9 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
                 texts.append(page["text"])
                 read_pages.append(page["title"])
                 for name, link in page["files"]:
-                    if name.lower().endswith(notion.VIDEO_EXT):
+                    if name.lower().endswith(notion.VIDEO_EXT) and ASSET.search(name):
+                        assets[name] = link
+                    elif name.lower().endswith(notion.VIDEO_EXT):
                         notion_videos.append((name, link))
                     else:
                         other.append(f"{name} (a file on the Notion page)")
@@ -337,7 +346,11 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
         from . import notify
         notify.send("progress", blocked_text(c["name"], blocked), campaign_id=cid)
         out.append(f"🔒 {len(blocked)} link(s) I couldn't open: see the note below for what to do.")
+    if assets:
+        out.append("🧩 Assets to put into clips (not clipped as footage): " + ", ".join(list(assets)[:8]))
     extra = campaigns._extra(campaigns.get(cid))
+    if assets:
+        extra["assets"] = {**(extra.get("assets") or {}), **assets}
     extra["blocked_links"] = list(dict.fromkeys((extra.get("blocked_links") or []) + [u for u, _ in blocked]))[-20:]
     db.x("UPDATE campaigns SET notes=? WHERE id=?", json.dumps(extra), cid)
     if not (folders or files or texts or other) and not problems:

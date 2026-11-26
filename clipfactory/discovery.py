@@ -90,7 +90,7 @@ def from_listing(item):
         return None
     raw = [str(p).lower().strip().replace(" ", "_") for p in item.get("socialPlatforms") or []]
     platforms = list(dict.fromkeys(PLATFORM_MAP[p] for p in raw if p in PLATFORM_MAP))
-    url = item.get("campaignUrl") or ""
+    url = item.get("campaignUrl") or cr_link(item)
     rate = item.get("rewardPerThousandUsd") if str(item.get("payoutType", "cpm")).lower() == "cpm" else None
     left = item.get("budgetLeftUsd")
     return {
@@ -117,8 +117,25 @@ def refresh_from_listings():
             campaigns.refresh_suggestion(c["id"], data)
 
 
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def cr_link(item):
+    """The listing's own campaign page. The scraper's free plan hides campaignUrl, but every listing keeps its
+    Content Rewards campaign id, and contentrewards.com/c/campaigns/<id> is that campaign's public page."""
+    cid = str((item or {}).get("id") or "") if isinstance(item, dict) else ""
+    return f"https://contentrewards.com/c/campaigns/{cid}" if UUID.match(cid) else ""
+
+
 def link_from_text(text):
-    """The campaign's whop.com page in a listing, or "". Other links (ads, images) never count."""
+    """The campaign's whop.com page in a listing (or its Content Rewards page), or "". Other links (ads,
+    images) never count."""
+    try:
+        item = json.loads(text or "")
+        if isinstance(item, dict) and (item.get("campaignUrl") or cr_link(item)):
+            return item.get("campaignUrl") or cr_link(item)
+    except (ValueError, TypeError):
+        pass
     links = [u.rstrip('",).') for u in re.findall(r"https?://(?:www\.)?whop\.com/[^\s\"'<>]+", text or "")
              if not any(h in u.lower() for h in IMAGE_HINTS)]
     return links[0].split("?")[0] if links else ""
@@ -129,7 +146,7 @@ def backfill_links():
     for c in campaigns.all_campaigns():
         if c.get("stage") != "suggested" or c.get("origin") != "discovered":
             continue
-        if c["url"] and "whop.com" in c["url"]:
+        if c["url"] and ("whop.com" in c["url"] or "contentrewards.com" in c["url"]):
             continue
         db.x("UPDATE campaigns SET url=? WHERE id=?", link_from_text(c.get("brief")), c["id"])
 
@@ -144,7 +161,7 @@ def add_from_data(data, text, provider, key=None, origin="discovered", notify_al
     data.setdefault("brief", text)
     if key and key.startswith("http") and not data.get("url"):
         data["url"] = key
-    if origin == "discovered" and "whop.com" not in (data.get("url") or ""):
+    if origin == "discovered" and not any(d in (data.get("url") or "") for d in ("whop.com", "contentrewards.com")):
         data["url"] = link_from_text(text)
     same = campaigns.find_same(data.get("name"))
     if same:

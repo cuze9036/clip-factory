@@ -152,5 +152,19 @@ class JoinFlowTest(unittest.TestCase):
         self.assertGreater(c["seen_at"], (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M"))
 
 
+
+class DirectLinkTest(unittest.TestCase):
+    def test_open_campaign_goes_to_the_campaign_page_not_a_search(self):
+        import json
+        from clipfactory import discovery, joinflow
+        item = {"id": "188c3e39-7850-4896-94df-e7a5be0cfec3", "title": "BOXABL", "campaignUrl": None,
+                "rewardPerThousandUsd": 1, "socialPlatforms": ["youtube"], "budgetLeftUsd": 5}
+        self.assertEqual(discovery.from_listing(item)["url"],
+                         "https://contentrewards.com/c/campaigns/188c3e39-7850-4896-94df-e7a5be0cfec3")
+        c = {"url": "", "name": "BOXABL", "brief": json.dumps(item)}
+        self.assertTrue(joinflow.open_link(c).startswith("https://contentrewards.com/c/campaigns/188c3e39"))
+        self.assertIn("google.com", joinflow.open_link({"url": "", "name": "X", "brief": "no id"}))
+
+
 if __name__ == "__main__":
     unittest.main()

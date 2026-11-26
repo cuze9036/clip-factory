@@ -61,6 +61,10 @@ def open_link(c):
     """The campaign's own page, or a search that finds it on Whop."""
     if c["url"] and c["url"].startswith("http"):
         return c["url"]
+    from . import discovery
+    found = discovery.link_from_text(c.get("brief"))   # the listing's own page (Content Rewards id)
+    if found:
+        return found
     return "https://www.google.com/search?q=" + quote_plus(f'site:whop.com "{c["name"]}"')
 
 

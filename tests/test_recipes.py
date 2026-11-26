@@ -66,6 +66,32 @@ class RecipeTest(unittest.TestCase):
         self.assertGreater(luma(clip["duration_s"] - 1.0), 200)      # last seconds: the card's box shows through
         self.assertIn("campaign's format", qa.added_text("ai_reveal", False, plan, ""))
 
+    def test_end_card_moves_off_a_caption_already_in_the_clip(self):
+        import numpy as np
+        from clipfactory import layout, recipes
+        d = self.tmp.name
+        clip = os.path.join(d, "clip.mp4")
+        make(clip, ["-f", "lavfi", "-i", "color=c=0x404040:s=720x1280:d=6:r=30", "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p"])
+        card = os.path.join(d, "card.mp4")   # the logo + text block, like the brand's card
+        make(card, ["-f", "lavfi", "-i", "color=c=black:s=1080x1920:d=3:r=30", "-vf",
+                    "drawbox=x=240:y=440:w=600:h=520:color=white:t=fill", "-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        top, bottom = recipes._card_band(card)
+        self.assertTrue(400 <= top <= 480 and 920 <= bottom <= 1000, (top, bottom))
+
+        def band(a, b):
+            rows = np.zeros(layout.BANDS)
+            rows[int(a / 1920 * layout.BANDS):int(b / 1920 * layout.BANDS) + 1] = 1.0
+            return rows
+        caption, face = band(1380, 1440), band(400, 700)   # the clip's own caption, and her face
+        with mock.patch.object(layout, "text_rows", return_value=caption), \
+                mock.patch.object(recipes, "_face_rows", return_value=face):
+            shift = recipes.card_shift([clip], 3.0, card)
+        a, b = top + shift, bottom + shift
+        self.assertTrue(b < 1380 or a > 1440, shift)                            # never on the caption
+        self.assertTrue(a > 700, shift)                                          # never on her face
+        self.assertGreaterEqual(a, recipes.TOP_TEXT)
+
 
 if __name__ == "__main__":
     unittest.main()

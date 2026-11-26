@@ -26,7 +26,7 @@ AI_REVEAL = {
             "people are making money with AI girls like her"],
     "reveal_at": 5.0,      # seconds
     "end_card_s": 3.0,     # the end card covers the last 3 seconds
-    "end_card_shift": 560,  # px down, so the logo doesn't cover her face
+    "end_card_shift": 560,  # px down by default; moved per clip off faces and text (card_shift)
     "hud": True,
 }
 
@@ -104,6 +104,79 @@ def _ass(path, lines, dur, r, font, rnd=random):
     pathlib.Path(path).write_text(head + "\n".join(ev) + "\n", encoding="utf-8")
 
 
+FIT = "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[v0]"
+TOP_TEXT = 470   # our lines sit above this (y px); the card never goes there
+
+
+def _card_band(card):
+    """(top, bottom) px of what's visible on the end card (its logo + text), on the 1080x1920 canvas."""
+    from . import layout
+    frames = layout.sample_frames(card, "[0:v]scale=1080:1920,setsar=1[v0]", 3.0, n=3, width=270)
+    if not frames:
+        return 440, 980
+    import numpy as np
+    lit = np.max(np.stack([f.max(axis=2) for f in frames]), axis=0).max(axis=1) > 50
+    ys = np.nonzero(lit)[0]
+    if not len(ys):
+        return 440, 980
+    k = 1920 / frames[0].shape[0]
+    return int(ys[0] * k), int(ys[-1] * k)
+
+
+def _face_rows(frames):
+    """Share of frames with a face in each of layout.BANDS bands (YuNet), or zeros without OpenCV."""
+    import numpy as np
+    from . import effects, layout
+    rows = np.zeros(layout.BANDS)
+    try:
+        import cv2
+        model = effects._yunet()
+        if not model or not hasattr(cv2, "FaceDetectorYN") or not frames:
+            return rows
+        h, w = frames[0].shape[:2]
+        det = cv2.FaceDetectorYN.create(str(model), "", (w, h), 0.6)
+        for f in frames:
+            _, faces = det.detect(f)
+            hit = np.zeros(layout.BANDS, bool)
+            for x, y, fw, fh in [tuple(map(float, face[:4])) for face in (faces if faces is not None else [])]:
+                hit[max(0, int(y / h * layout.BANDS)):min(layout.BANDS, int((y + fh * 1.3) / h * layout.BANDS) + 1)] = True
+            rows += hit
+    except Exception:
+        return rows
+    return rows / max(1, len(frames))
+
+
+def card_shift(parts, start, card, default=560):
+    """How far to move the end card (px, + = down) so its logo lands on no face and no text already in the
+    picture (a clip's own caption), and below our lines. Looks at the footage under the last seconds."""
+    from . import layout
+    try:
+        offset, src = start, parts[-1]
+        for p in parts[:-1]:   # which part plays under the end card, and from when
+            d = ffprobe(p)["duration"]
+            if offset < d:
+                src = p
+                break
+            offset -= d
+        span = max(1.0, ffprobe(src)["duration"] - offset)
+        frames = layout.sample_frames(src, FIT.replace("[0:v]", f"[0:v]trim=start={offset:.2f},setpts=PTS-STARTPTS,"),
+                                      span, n=6)
+        text, face = layout.text_rows(frames), _face_rows(frames)
+        top, bottom = _card_band(card)
+    except Exception:
+        return default
+    best, score = default, None
+    for shift in range(-400, 901, 40):
+        a, b = top + shift, bottom + shift
+        if a < TOP_TEXT or b > 1880:
+            continue
+        lo, hi = int((a - 40) / 1920 * layout.BANDS), min(layout.BANDS, int((b + 40) / 1920 * layout.BANDS) + 1)
+        s = 3 * float(text[lo:hi].max(initial=0)) + 2 * float(face[lo:hi].max(initial=0)) + abs(shift - default) / 4000
+        if score is None or s < score:
+            best, score = shift, s
+    return best
+
+
 def render_clip(c, clip, m):
     """Build the finished clip. Returns {"path", "duration", "plan"} like render.render."""
     from . import render, styles
@@ -139,9 +212,10 @@ def render_clip(c, clip, m):
     ecn = n
     inputs += ["-i", str(ec)]
     start = max(0.0, dur - r["end_card_s"])
-    shift = int(r.get("end_card_shift", 0))
-    vf.append(f"[{ecn}:v]scale=1080:1920,setsar=1,fps=30,crop=1080:{1920 - shift}:0:0,"
-              f"pad=1080:1920:0:{shift}:black,tpad=start_duration={start:.2f}:color=black:"
+    shift = card_shift(parts, start, ec, int(r.get("end_card_shift", 0)))
+    move = (f"crop=1080:{1920 - shift}:0:0,pad=1080:1920:0:{shift}:black" if shift >= 0 else
+            f"crop=1080:{1920 + shift}:0:{-shift},pad=1080:1920:0:0:black")
+    vf.append(f"[{ecn}:v]scale=1080:1920,setsar=1,fps=30,{move},tpad=start_duration={start:.2f}:color=black:"
               f"stop_mode=add:stop_duration=6:color=black,format=gbrp[ec]")
     vf.append(f"[base]trim=0:{dur:.2f},setpts=PTS-STARTPTS,format=gbrp[b]")
     vf.append("[b][ec]blend=all_mode=screen:shortest=1,format=yuv420p,"
@@ -152,6 +226,7 @@ def render_clip(c, clip, m):
            "-t", f"{dur:.2f}"]
     render._encode(cmd, out, config.section("render"))
     ass.unlink(missing_ok=True)
-    plan = {"recipe": r["name"], "lines": lines, "parts": len(parts), "end_card_from": round(start, 2)}
+    plan = {"recipe": r["name"], "lines": lines, "parts": len(parts), "end_card_from": round(start, 2),
+            "end_card_shift": shift}
     return {"path": str(out), "duration": dur, "plan": plan}
 

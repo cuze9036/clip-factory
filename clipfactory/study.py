@@ -237,11 +237,12 @@ def changes(now, before):
 
 # ---------- TikTok / X numbers from the owner's screenshots ----------
 
-SHOT_HELP = """📸 **TikTok / X numbers: send screenshots here in #ai-insights, once a day**
+SHOT_HELP = """📸 **TikTok / X / Instagram numbers: send screenshots here in #ai-insights, once a day**
 1. **TikTok** app → Profile → ☰ → **Creator tools → Analytics → Content**, or open a video → **⋯ → Analytics**.
    **X** app → open your post → **📊 View post analytics**, or your Profile → Posts (views under each post).
+   **Instagram** app → open the reel → **View insights** (or Profile → ☰ → **Insights → Content you shared**).
 2. Take screenshots where the **post text and its views** are visible (likes, watch time, traffic sources too if shown).
-3. Send them here, all at once is fine. You can type `tiktok` or `x` with them.
+3. Send them here, all at once is fine. You can type `tiktok`, `x` or `insta` with them.
 The AI reads them, puts the numbers on the right clips and uses them in the daily study. That's all."""
 
 SHOT_PROMPT = """This is a screenshot from the owner's own social media account (TikTok, X/Twitter, Instagram,
@@ -311,7 +312,8 @@ def read_screenshot(path, note=""):
     note_l = (note or "").lower().strip()
     plat = shot["platform"]
     if plat == "other":
-        plat = "tiktok" if "tiktok" in note_l else "x" if ("twitter" in note_l or note_l in ("x", "x post")) else plat
+        plat = ("tiktok" if "tiktok" in note_l else "instagram" if "insta" in note_l
+                else "x" if ("twitter" in note_l or note_l in ("x", "x post")) else plat)
     ours = db.q("""SELECT p.id, k.title, k.description FROM posts p JOIN clips k ON k.id=p.clip_id
                    WHERE p.platform=? AND p.status='posted' ORDER BY p.posted_at DESC LIMIT 60""", plat)
     matched, unmatched = [], []

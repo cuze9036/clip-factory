@@ -217,7 +217,8 @@ def add_link(cid, line):
     """A link or folder for a campaign you joined: add it as footage and start the lane. Returns a reply."""
     c = campaigns.get(cid)
     line = line.strip().strip("<>")
-    if "docs.google.com/" in line or DRIVE.match(line):   # Drive folders/files and guide docs: explore them
+    from . import notion
+    if "docs.google.com/" in line or DRIVE.match(line) or notion.is_notion(line):   # explore them all the way down
         from . import gdrive
         db.kv_set(AWAIT_KEY, None)
         return gdrive.explore(cid, line)
@@ -230,6 +231,10 @@ def add_link(cid, line):
     try:
         reply = campaigns.add_source(cid, line)
     except ValueError as e:
+        if line.startswith("http"):   # any other web page (a brief, a reference hub): read it and go deeper
+            from . import gdrive
+            db.kv_set(AWAIT_KEY, None)
+            return gdrive.explore(cid, line)
         return f"{e}"
     if c and c.get("stage") == "suggested" and campaigns._extra(c).get("joined_at"):
         campaigns.activate(cid)
@@ -287,8 +292,10 @@ def apply_brief(cid, text, quiet=False):
             except (ValueError, Exception) as e:
                 blocked.append((link, simple_help(link, str(e))))
     from .guide import DOC
+    from . import notion
     drive = sorted(set(m.group(0).rstrip(').,') for m in DRIVE.finditer(text))) + \
-        sorted(set(m.group(0).rstrip(').,') for m in DOC.finditer(text)))
+        sorted(set(m.group(0).rstrip(').,') for m in DOC.finditer(text))) + \
+        sorted(set(u.rstrip(').,') for u in re.findall(r"https?://\S+", text) if notion.is_notion(u)))
     drive_notes = []
     if drive:   # Drive folders/files and Google Docs on the page: explore them all the way down
         from . import gdrive   # (guides inside, the folders, Dropbox, YouTube and Twitch links they point to)

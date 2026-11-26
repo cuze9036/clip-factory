@@ -140,7 +140,7 @@ def _launch(p):
     raise RuntimeError("no browser found")
 
 
-def render(url, timeout_s=45):
+def render(url, timeout_s=45, all_links=False):
     """Open the page like a private browser window with no account (fresh, no cookies, never logged in), let its
     JavaScript load, open "show more" / "Resources" style sections, and return the text with every link on it,
     including links inside the data the page loads."""
@@ -189,7 +189,7 @@ def render(url, timeout_s=45):
         finally:
             browser.close()
     found = sorted(set(m.group(0).rstrip(".,)") for blob in [html, visible, *data] for m in FOOTAGE.finditer(blob)))
-    links = sorted(set(u for u in links if FOOTAGE.search(u)) | set(found))
+    links = sorted(set(u for u in links if all_links or FOOTAGE.search(u)) | set(found))
     text = re.sub(r"\n\s*\n+", "\n", visible).strip()
     extra = [t for t in _script_text([html] + data) if t[:80] not in text]
     if extra:

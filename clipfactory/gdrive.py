@@ -27,7 +27,7 @@ FILE = re.compile(r"drive\.google\.com/(?:file/(?:u/\d+/)?d/|open\?id=|uc\?(?:ex
 DOC = re.compile(r"docs\.google\.com/(document|presentation|spreadsheets)/(?:u/\d+/)?d/([\w-]{20,})")
 # Places the bot can't download from: you'd have to fetch these yourself.
 CANT_OPEN = re.compile(r"https?://(?:[\w-]+\.)*(mega\.nz|wetransfer\.com|we\.tl|mediafire\.com|frame\.io|box\.com|"
-                       r"onedrive\.live\.com|1drv\.ms|sharepoint\.com|icloud\.com|notion\.so|notion\.site|"
+                       r"onedrive\.live\.com|1drv\.ms|sharepoint\.com|icloud\.com|"
                        r"terabox\.com|pcloud\.com|drop\.download|gofile\.io)/\S*", re.I)
 LINK = re.compile(r"https?://[^\s<>\"')\]]+")
 VIDEO_EXT = (".mp4", ".mov", ".mkv", ".webm", ".m4v")
@@ -184,31 +184,38 @@ def blocked_text(name, blocked):
 
 
 def explore(cid, link, max_items=150, max_depth=8, drive=None):
-    """Follow a link (and the links inside its guides) to find footage and instructions. Returns a reply."""
-    from . import guide
+    """Follow a link level by level until nothing new opens: Drive folders and Docs, public Notion pages (and
+    their sub-pages and uploaded videos), and any web page with the links on it that can lead to instructions or
+    footage. Each page is read whole; its text becomes the campaign guide, its videos the footage. Returns a reply."""
+    from . import guide, notion, webpage
     drive = drive or Drive()
     c = campaigns.get(cid)
     queue, seen = [(link.strip().strip("<>"), 0)], set()
     folders, files, texts, other, problems, needs_login = {}, {}, [], [], [], False
     blocked = []   # (link, what to do): links the bot can't open, explained simply
-    count = 0
+    parents, read_pages, notion_videos = {}, [], []
+    count = web = 0
 
-    def take_links(text, depth):
-        for u in LINK.findall(text or ""):
+    def take_links(text, depth, parent=None, more=()):
+        for u in list(LINK.findall(text or "")) + list(more):
             u = u.rstrip(".,;")
             if CANT_OPEN.search(u):
                 if u not in [b[0] for b in blocked]:
                     blocked.append((u, simple_help(u)))
                 continue
-            if any(rx.search(u) for rx in (FOLDER, FILE, DOC)) or re.search(
+            if any(rx.search(u) for rx in (FOLDER, FILE, DOC)) or notion.is_notion(u) or re.search(
                     r"dropbox\.com/|youtube\.com/|youtu\.be/|twitch\.tv/|kick\.com/|vimeo\.com/|streamable\.com/|"
                     r"\.(mp4|mov|m4v|webm|mkv)(\?|$)", u, re.I):
+                queue.append((u, depth + 1))
+            elif webpage.worth_opening(u, parent, depth + 1):
+                parents.setdefault(u, parent)
                 queue.append((u, depth + 1))
 
     while queue and count < max_items:
         url, depth = queue.pop(0)
         key = (FOLDER.search(url) or FILE.search(url) or DOC.search(url))
-        ident = key.group(key.lastindex) if key else url
+        ident = key.group(key.lastindex) if key else (notion.page_id(url) if notion.is_notion(url) else None) or \
+            url.split("#")[0].rstrip("/")
         if ident in seen or depth > max_depth:
             continue
         seen.add(ident)
@@ -255,13 +262,29 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
                     if t.strip():
                         texts.append(t)
                         take_links(t, depth)
-            else:   # Dropbox / YouTube / Twitch links found inside a guide
+            elif notion.is_notion(url):   # a public Notion page: all of it, sub-pages are the next level
+                page = notion.read(url)
+                texts.append(page["text"])
+                read_pages.append(page["title"])
+                for name, link in page["files"]:
+                    if name.lower().endswith(notion.VIDEO_EXT):
+                        notion_videos.append((name, link))
+                    else:
+                        other.append(f"{name} (a file on the Notion page)")
+                take_links("", depth, url, page["links"])
+            else:   # Dropbox / YouTube / Twitch links found inside a guide, or any other web page
                 try:
                     other.append(campaigns.add_source(cid, url))
                 except ValueError:
                     if re.search(r"dropbox\.com/|twitch\.tv/\w+/videos?/|/videos/", url):
                         blocked.append((url, simple_help(url)))
-                    # other links (a channel's page, example posts) aren't footage: skip them quietly
+                    elif web < webpage.MAX_PAGES and (depth == 0 or webpage.worth_opening(url, parents.get(url), depth)):
+                        web += 1   # a web page: read it whole and follow its links one level deeper
+                        page = webpage.read(url)
+                        if len(page["text"].split()) > 20:
+                            texts.append(page["text"])
+                            read_pages.append(page["title"][:60])
+                        take_links("", depth, page["url"], page["links"])
         except NeedsLogin as e:
             needs_login = True
             problems.append(str(e))
@@ -270,11 +293,31 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
             problems.append(f"{url[:80]}: {str(e)[:120]}")
             blocked.append((url, simple_help(url, str(e))))
 
+    if notion_videos:   # videos uploaded to the Notion page: saved in a folder the watcher clips from
+        d = config.data_dir() / "footage" / cid / "notion"
+        d.mkdir(parents=True, exist_ok=True)
+        got = 0
+        for name, link in notion_videos[:30]:
+            out = d / re.sub(r'[<>:"/\\|?*]+', "_", name)
+            try:
+                if not out.exists():
+                    notion.download(link, out)
+                got += 1
+            except Exception as e:
+                problems.append(f"{name}: {str(e)[:80]}")
+        if got:
+            try:
+                campaigns.add_source(cid, str(d))
+            except Exception:
+                pass   # already a source
+            other.append(f"{got} video(s) from the Notion page saved as footage")
     for fid in folders:
         _add_source(cid, f"folder:{fid}")
     for fid in files:
         _add_source(cid, f"file:{fid}")
-    out = [f"**{c['name']}**: explored the link."]
+    out = [f"**{c['name']}**: explored the link ({count} link(s) opened, level by level)."]
+    if read_pages:
+        out.append(f"📖 Read {len(read_pages)} page(s): " + ", ".join(dict.fromkeys(read_pages))[:400])
     if folders or files:
         n = sum(f["videos"] for f in folders.values()) + len(files)
         out.append(f"🎬 Footage: {n} video(s) in {len(folders)} folder(s)" + (f" + {len(files)} file(s)" if files else "")
@@ -300,7 +343,7 @@ def explore(cid, link, max_items=150, max_depth=8, drive=None):
     if not (folders or files or texts or other) and not problems:
         out.append("No videos or guides found behind that link.")
     c = campaigns.get(cid)
-    if (folders or files) and c.get("stage") == "suggested" and campaigns._extra(c).get("joined_at"):
+    if (folders or files or notion_videos) and c.get("stage") == "suggested" and campaigns._extra(c).get("joined_at"):
         campaigns.activate(cid)
         out.append(f"**{c['name']} is running.** Clips will show up here for review.")
     return "\n".join(out)
